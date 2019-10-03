@@ -1,15 +1,25 @@
 From Coq Require Export String Ascii.
 From Prelude Require Export Control.
-From Prelude Require Import State Classes.
+From Prelude Require Import State Classes Either Equality.
 
 #[global] Open Scope monad_scope.
 
-Definition parser (a : Type) := state string a.
+Definition error_stack := list string.
 
-Definition parse {a} (parser : parser a) (input : string) : a :=
-  fst (parser input).
+Definition parser (a : Type) := state_t string (sum error_stack) a.
 
-Axiom fail : forall {a : Type}, parser a.
+Definition with_context {a} (msg : string) (p : parser a) : parser a :=
+  fun input =>
+    match p input with
+    | inl x => inl (cons msg x)
+    | inr y => inr y
+    end.
+
+Definition parse {a} (parser : parser a) (input : string) : error_stack + a :=
+  fst <$> (parser input).
+
+Definition fail {a} (msg : string) : parser a :=
+  fun s => inl (cons msg nil).
 
 Definition read_char : parser ascii :=
   do var input <- get in
@@ -17,7 +27,7 @@ Definition read_char : parser ascii :=
      | String a rst => do put rst;
                           pure a
                        end
-     | EmptyString => fail
+     | EmptyString => fail "expected character, found end of input"
      end
   end.
 
@@ -25,16 +35,18 @@ Definition char (a : ascii) : parser unit :=
   do var c <- read_char in
      if eqb a c
      then pure tt
-     else fail
+     else fail "expected a character, found another" (* todo: easy string interpolation *)
   end.
 
 Fixpoint str (a : string) : parser unit :=
-  match a with
-  | String c rst => do char c;
-                       str rst
-                    end
-  | EmptyString => pure tt
-  end.
+  let fix str_aux (a : string) :=
+      match a with
+      | String c rst => do char c;
+                           str_aux rst
+      end
+      | EmptyString => pure tt
+      end
+  in with_context "trying to consume a string" (str_aux a).
 
 Inductive iter_step (a b : Type) : Type :=
 | Continue (acc : a)
@@ -62,7 +74,7 @@ Definition iter {a b} (init : a) (f : a -> ascii -> iter_step a b) : parser b :=
        do put rst;
           pure x
         end
-     | None => fail
+     | None => fail "found end of input before satisfying a predicate"
      end
   end.
 

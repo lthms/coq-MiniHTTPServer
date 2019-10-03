@@ -11,3 +11,4 @@ Definition http_request : parser (string * string) :=
   end.
 
 Eval vm_compute in (parse http_request "GET /etc/passwd HTTP/1.1"%string).
+Eval vm_compute in (parse http_request "GET /etc/passwd HTP/1.1"%string).
