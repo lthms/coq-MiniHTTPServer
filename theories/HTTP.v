@@ -47,3 +47,14 @@ Definition get_http_request : parser path :=
 Eval vm_compute in (parse get_http_request "GET ../..//etc/passwd HTTP/1.1"%string).
 Eval vm_compute in (parse get_http_request "GET /etc/passwd HTP/1.1"%string).
 Eval vm_compute in (parse get_http_request "PUT /etc/passwd HTTP/1.1"%string).
+
+Fixpoint simplify (dirids : list directory_id) : list directory_id :=
+  match dirids with
+  | cons Current rst => simplify rst
+  | cons Parent rst => simplify rst
+  | cons _ (cons Parent rst) => simplify rst
+  | cons x rst => cons x (simplify rst)
+  | nil => nil
+  end.
+
+Eval compute in (simplify <$> (parse path_dirname "/home/coq/../coqide/./x/../ ")).
