@@ -1,6 +1,10 @@
 From Praecia Require Import Parser.
 
-Axiom of_ascii_list : list ascii -> string.
+Fixpoint of_ascii_list (l : list ascii) : string :=
+  match l with
+  | cons x rst => String x (of_ascii_list rst)
+  | nil => EmptyString
+  end.
 
 Inductive directory_id : Type :=
 | Dirname (s : string)
@@ -37,16 +41,9 @@ Definition read_path : parser path :=
                               else Some (of_ascii_list maybe_filename)))
   end.
 
-Definition http_request : parser (string * path) :=
-  do var method <- str "GET" in
-     whitespaces;
-     var path <- read_path in
-     whitespaces;
-     str "HTTP/1.1";
+Definition get_http_request : parser path :=
+  str "GET" *> whitespaces *> read_path <* whitespaces <* str "HTTP/1.1".
 
-     pure (method, path)
-  end.
-
-Eval vm_compute in (parse http_request "GET /etc/passwd HTTP/1.1"%string).
-Eval vm_compute in (parse http_request "GET /etc/passwd HTP/1.1"%string).
-Eval vm_compute in (parse http_request "PUT /etc/passwd HTTP/1.1"%string).
+Eval vm_compute in (parse get_http_request "GET ../..//etc/passwd HTTP/1.1"%string).
+Eval vm_compute in (parse get_http_request "GET /etc/passwd HTP/1.1"%string).
+Eval vm_compute in (parse get_http_request "PUT /etc/passwd HTTP/1.1"%string).
