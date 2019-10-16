@@ -1,140 +1,61 @@
-From Praecia Require Import Parser URI.
+From FreeSpec Require Import Core.
+From Praecia Require Import Parser URI FileSystem TCP.
+
+Generalizable All Variables.
 
 Inductive request :=
 | Get (resource : uri).
 
+Inductive status :=
+| success_OK
+| client_error_BadRequest
+| client_error_NotFound.
+
+Record response := make_response { code : status
+                                 ; body : string
+                                 }.
+
+Axiom response_to_string : response -> string.
+
 Definition http_request : parser request :=
   Get <$> (str "GET" *> whitespaces *> read_uri <* whitespaces <* str "HTTP/1.1").
 
-#[local]
-Fixpoint canonicalize_aux (acc : list directory_id) (dirids : list directory_id) : list directory_id :=
-  match dirids with
-  | cons Current rst => canonicalize_aux acc rst
-  | cons Parent rst => canonicalize_aux (List.tl acc) rst
-  | cons x rst => canonicalize_aux (cons x acc) rst
-  | nil => List.rev acc
+(* TODO: use base. *)
+(* TODO: add a notation in coq-prelude var (x : T) <- p in q *)
+Definition request_handler `{Provide ix FILESYSTEM}
+    (_base : list directory_id) (req : request)
+  : impure ix response :=
+  match req with
+  | Get uri =>
+    do let path := uri_to_path uri in
+       var isf <- is_file path in
+       if (isf : bool)
+       then do var fd <- open path in
+               var content <- (read fd <* close fd) in
+               pure (make_response success_OK content)
+            end
+       else pure (make_response client_error_NotFound "Resource not found.")
+    end
   end.
 
-Definition canonicalize := canonicalize_aux nil.
+Definition tcp_handler `{Provide ix FILESYSTEM}
+    (_base : list directory_id) (req : string)
+  : impure ix string :=
+  response_to_string <$> match parse http_request req with
+                         | inl _ => pure (make_response client_error_BadRequest "")
+                         | inr req => request_handler _base req
+                         end.
 
-Eval compute in (canonicalize <$> (parse path_dirname "/home/coq/../../../coqide/./x/../ ")).
-Eval compute in (canonicalize <$> (parse path_dirname "/home/coq/coqide/./x/../ ")).
+Definition http_server `{Provide ix FILESYSTEM, Provide ix TCP} (_base : list directory_id)
+  : impure ix unit :=
+  do var server <- new_tcp_socket "localhost:8000" in
+     listen_incoming_connection server;
 
-Definition dirname_eq (d1 d2: list directory_id) : Prop :=
-  canonicalize d1 = canonicalize d2.
+     var client <- accept_connection server in
+     var req <- read_socket client in
+     var res <- tcp_handler _base req in
 
-Inductive canonical : list directory_id -> Prop :=
-| canonical_nil : canonical nil
-| canonical_cons (s : string) (rst : list directory_id) (canonical_rst : canonical rst)
-  : canonical (cons (Dirname s) rst).
-
-#[program]
-Fixpoint elem {a} (n : nat) (l : list a) (bound : n < List.length l) : a :=
-  match l, n with
-  | nil, _ => _
-  | cons x _, O => x
-  | cons _ rst, S n => elem n rst _
+     write_socket client res;
+     close_socket client;
+     close_socket server
   end.
-
-Next Obligation.
-  cbn in bound.
-  now apply PeanoNat.Nat.nlt_0_r in bound.
-Qed.
-
-Next Obligation.
-  cbn in bound.
-  lia.
-Qed.
-
-Corollary canonical_nth (d : list directory_id)
-  : canonical d <-> forall (n : nat), exists (name : string), List.nth n d (Dirname "_") = Dirname name.
-
-Proof.
-  split.
-  + intros canon. induction d.
-    ++ intros n.
-       exists "_"%string.
-       destruct n; reflexivity.
-    ++ intros n.
-       inversion canon; subst.
-       destruct n.
-       +++ now exists s.
-       +++ specialize IHd with n.
-           apply IHd in canonical_rst.
-           destruct canonical_rst.
-           now exists x.
-  + intros rules.
-    induction d.
-    ++ constructor.
-    ++ destruct a.
-       +++ constructor.
-           apply IHd.
-           intros n.
-           specialize (rules (S n)).
-           destruct rules.
-           eassert (rew : List.nth (S n) (cons (Dirname s) d) = List.nth n d) by reflexivity.
-           rewrite rew in H.
-           exists x.
-           now rewrite <- H.
-    +++ specialize (rules 0).
-        inversion rules.
-        now cbn in H.
-    +++ specialize (rules 0).
-        inversion rules.
-        now cbn in H.
-Qed.
-
-
-#[local]
-Lemma canonicalize_aux_canonical (d acc : list directory_id) (acc_canon : canonical acc)
-  : canonical (canonicalize_aux acc d).
-
-Proof.
-  revert acc acc_canon.
-  induction d; intros acc acc_canon.
-  + cbn.
-    admit.
-  + destruct a.
-    ++ cbn.
-       apply IHd.
-       constructor; auto.
-    ++ cbn.
-       now apply IHd.
-    ++ cbn.
-       apply IHd.
-       admit.
-Admitted.
-
-Lemma canonicalize_canonical (d : list directory_id)
-  : canonical (canonicalize d).
-
-Proof.
-  apply canonicalize_aux_canonical.
-  constructor.
-Qed.
-
-Remark canonical_canonicalize_cons_equ (s : string) (d : list directory_id)
-  : canonicalize (cons (Dirname s) d) = cons (Dirname s) (canonicalize d).
-
-Proof.
-Admitted.
-
-
-Lemma canonicalize_canonical_equ (d : list directory_id) (canon : canonical d)
-  : canonicalize d = d.
-
-Proof.
-  induction d.
-  + auto.
-  + inversion canon; subst.
-    rewrite canonical_canonicalize_cons_equ.
-    rewrite IHd; auto.
-Qed.
-
-Lemma canonicalize_idempontent (d : list directory_id)
-  : canonicalize (canonicalize d) = canonicalize d.
-
-Proof.
-  rewrite canonicalize_canonical_equ; [ reflexivity |].
-  apply canonicalize_canonical.
-Qed.

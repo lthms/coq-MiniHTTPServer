@@ -1,4 +1,4 @@
-From Praecia Require Import Socket.
+From Praecia Require Import TCP.
 
 Generalizable All Variables.
 

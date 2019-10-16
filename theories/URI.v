@@ -1,4 +1,5 @@
 From Praecia Require Import Parser.
+From Prelude Require Import Option.
 
 Fixpoint of_ascii_list (l : list ascii) : string :=
   match l with
@@ -14,6 +15,113 @@ Inductive directory_id : Type :=
 Inductive uri := make_uri { dirname : list directory_id
                           ; filename : option string
                           }.
+
+#[local]
+Fixpoint canonicalize_aux (acc : list directory_id) (dirids : list directory_id) : list directory_id :=
+  match dirids with
+  | cons Current rst => canonicalize_aux acc rst
+  | cons Parent rst => canonicalize_aux (List.tl acc) rst
+  | cons x rst => canonicalize_aux (cons x acc) rst
+  | nil => List.rev acc
+  end.
+
+Definition canonicalize := canonicalize_aux nil.
+
+Definition dirname_eq (d1 d2: list directory_id) : Prop :=
+  canonicalize d1 = canonicalize d2.
+
+Inductive canonical : list directory_id -> Prop :=
+| canonical_nil : canonical nil
+| canonical_cons (s : string) (rst : list directory_id) (canonical_rst : canonical rst)
+  : canonical (cons (Dirname s) rst).
+
+#[local]
+Lemma canonicalize_aux_canonical (d acc : list directory_id) (acc_canon : canonical acc)
+  : canonical (canonicalize_aux acc d).
+
+Proof.
+  revert acc acc_canon.
+  induction d; intros acc acc_canon.
+  + cbn.
+    admit.
+  + destruct a.
+    ++ cbn.
+       apply IHd.
+       constructor; auto.
+    ++ cbn.
+       now apply IHd.
+    ++ cbn.
+       apply IHd.
+       admit.
+Admitted.
+
+Lemma canonicalize_canonical (d : list directory_id)
+  : canonical (canonicalize d).
+
+Proof.
+  apply canonicalize_aux_canonical.
+  constructor.
+Qed.
+
+Remark canonical_canonicalize_cons_equ (s : string) (d : list directory_id) (canon : canonical d)
+  : canonicalize (cons (Dirname s) d) = cons (Dirname s) (canonicalize d).
+
+Proof.
+Admitted.
+
+Lemma canonicalize_canonical_equ (d : list directory_id) (canon : canonical d)
+  : canonicalize d = d.
+
+Proof.
+  induction d.
+  + auto.
+  + inversion canon; subst.
+    rewrite canonical_canonicalize_cons_equ; auto.
+    rewrite IHd; auto.
+Qed.
+
+Lemma canonicalize_idempontent (d : list directory_id)
+  : canonicalize (canonicalize d) = canonicalize d.
+
+Proof.
+  rewrite canonicalize_canonical_equ; [ reflexivity |].
+  apply canonicalize_canonical.
+Qed.
+
+Search (string -> string -> string).
+
+#[program, local]
+Fixpoint uri_to_path_aux (d : list directory_id) (canon : canonical d) : string :=
+  match d with
+  | nil => EmptyString
+  | cons (Dirname x) rst => append x (append "/" (uri_to_path_aux rst _))
+  | cons Parent _ => _
+  | cons Current _ => _
+  end.
+
+Next Obligation.
+  inversion canon; auto.
+Defined.
+
+Next Obligation.
+  exfalso; inversion canon.
+Defined.
+
+Next Obligation.
+  exfalso; inversion canon.
+Defined.
+
+Search (?a -> option ?a -> ?a).
+
+#[program]
+Definition uri_to_path (u : uri) : string :=
+  append (uri_to_path_aux (canonicalize (dirname u)) _) (fromMaybe ""%string (filename u)).
+
+Next Obligation.
+  apply canonicalize_canonical.
+Qed.
+
+(** * Parsing URI *)
 
 Definition dir_id_sep := peak (eoi <|> ((char " " <|> char "/") *> pure tt)).
 
