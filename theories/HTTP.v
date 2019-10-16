@@ -49,15 +49,134 @@ Eval vm_compute in (parse get_http_request "GET /etc/passwd HTP/1.1"%string).
 Eval vm_compute in (parse get_http_request "PUT /etc/passwd HTTP/1.1"%string).
 
 #[local]
-Fixpoint simplify_aux (acc : list directory_id) (dirids : list directory_id) : list directory_id :=
+Fixpoint canonicalize_aux (acc : list directory_id) (dirids : list directory_id) : list directory_id :=
   match dirids with
-  | cons Current rst => simplify_aux acc rst
-  | cons Parent rst => simplify_aux (List.tl acc) rst
-  | cons x rst => simplify_aux (cons x acc) rst
+  | cons Current rst => canonicalize_aux acc rst
+  | cons Parent rst => canonicalize_aux (List.tl acc) rst
+  | cons x rst => canonicalize_aux (cons x acc) rst
   | nil => List.rev acc
   end.
 
-Definition simplify := simplify_aux nil.
+Definition canonicalize := canonicalize_aux nil.
 
-Eval compute in (simplify <$> (parse path_dirname "/home/coq/../../../coqide/./x/../ ")).
-Eval compute in (simplify <$> (parse path_dirname "/home/coq/coqide/./x/../ ")).
+Eval compute in (canonicalize <$> (parse path_dirname "/home/coq/../../../coqide/./x/../ ")).
+Eval compute in (canonicalize <$> (parse path_dirname "/home/coq/coqide/./x/../ ")).
+
+Definition dirname_eq (d1 d2: list directory_id) : Prop :=
+  canonicalize d1 = canonicalize d2.
+
+Inductive canonical : list directory_id -> Prop :=
+| canonical_nil : canonical nil
+| canonical_cons (s : string) (rst : list directory_id) (canonical_rst : canonical rst)
+  : canonical (cons (Dirname s) rst).
+
+#[program]
+Fixpoint elem {a} (n : nat) (l : list a) (bound : n < List.length l) : a :=
+  match l, n with
+  | nil, _ => _
+  | cons x _, O => x
+  | cons _ rst, S n => elem n rst _
+  end.
+
+Next Obligation.
+  cbn in bound.
+  now apply PeanoNat.Nat.nlt_0_r in bound.
+Qed.
+
+Next Obligation.
+  cbn in bound.
+  lia.
+Qed.
+
+Corollary canonical_nth (d : list directory_id)
+  : canonical d <-> forall (n : nat), exists (name : string), List.nth n d (Dirname "_") = Dirname name.
+
+Proof.
+  split.
+  + intros canon. induction d.
+    ++ intros n.
+       exists "_"%string.
+       destruct n; reflexivity.
+    ++ intros n.
+       inversion canon; subst.
+       destruct n.
+       +++ now exists s.
+       +++ specialize IHd with n.
+           apply IHd in canonical_rst.
+           destruct canonical_rst.
+           now exists x.
+  + intros rules.
+    induction d.
+    ++ constructor.
+    ++ destruct a.
+       +++ constructor.
+           apply IHd.
+           intros n.
+           specialize (rules (S n)).
+           destruct rules.
+           eassert (rew : List.nth (S n) (cons (Dirname s) d) = List.nth n d) by reflexivity.
+           rewrite rew in H.
+           exists x.
+           now rewrite <- H.
+    +++ specialize (rules 0).
+        inversion rules.
+        now cbn in H.
+    +++ specialize (rules 0).
+        inversion rules.
+        now cbn in H.
+Qed.
+
+
+#[local]
+Lemma canonicalize_aux_canonical (d acc : list directory_id) (acc_canon : canonical acc)
+  : canonical (canonicalize_aux acc d).
+
+Proof.
+  revert acc acc_canon.
+  induction d; intros acc acc_canon.
+  + cbn.
+    admit.
+  + destruct a.
+    ++ cbn.
+       apply IHd.
+       constructor; auto.
+    ++ cbn.
+       now apply IHd.
+    ++ cbn.
+       apply IHd.
+       admit.
+Admitted.
+
+Lemma canonicalize_canonical (d : list directory_id)
+  : canonical (canonicalize d).
+
+Proof.
+  apply canonicalize_aux_canonical.
+  constructor.
+Qed.
+
+Remark canonical_canonicalize_cons_equ (s : string) (d : list directory_id)
+  : canonicalize (cons (Dirname s) d) = cons (Dirname s) (canonicalize d).
+
+Proof.
+Admitted.
+
+
+Lemma canonicalize_canonical_equ (d : list directory_id) (canon : canonical d)
+  : canonicalize d = d.
+
+Proof.
+  induction d.
+  + auto.
+  + inversion canon; subst.
+    rewrite canonical_canonicalize_cons_equ.
+    rewrite IHd; auto.
+Qed.
+
+Lemma canonicalize_idempontent (d : list directory_id)
+  : canonicalize (canonicalize d) = canonicalize d.
+
+Proof.
+  rewrite canonicalize_canonical_equ; [ reflexivity |].
+  apply canonicalize_canonical.
+Qed.
