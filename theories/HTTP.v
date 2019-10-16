@@ -48,13 +48,16 @@ Eval vm_compute in (parse get_http_request "GET ../..//etc/passwd HTTP/1.1"%stri
 Eval vm_compute in (parse get_http_request "GET /etc/passwd HTP/1.1"%string).
 Eval vm_compute in (parse get_http_request "PUT /etc/passwd HTTP/1.1"%string).
 
-Fixpoint simplify (dirids : list directory_id) : list directory_id :=
+#[local]
+Fixpoint simplify_aux (acc : list directory_id) (dirids : list directory_id) : list directory_id :=
   match dirids with
-  | cons Current rst => simplify rst
-  | cons Parent rst => simplify rst
-  | cons _ (cons Parent rst) => simplify rst
-  | cons x rst => cons x (simplify rst)
-  | nil => nil
+  | cons Current rst => simplify_aux acc rst
+  | cons Parent rst => simplify_aux (List.tl acc) rst
+  | cons x rst => simplify_aux (cons x acc) rst
+  | nil => List.rev acc
   end.
 
-Eval compute in (simplify <$> (parse path_dirname "/home/coq/../coqide/./x/../ ")).
+Definition simplify := simplify_aux nil.
+
+Eval compute in (simplify <$> (parse path_dirname "/home/coq/../../../coqide/./x/../ ")).
+Eval compute in (simplify <$> (parse path_dirname "/home/coq/coqide/./x/../ ")).
