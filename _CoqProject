@@ -2,5 +2,6 @@
 
 theories/TCP.v
 theories/Parser.v
+theories/URI.v
 theories/HTTP.v
 theories/Main.v
