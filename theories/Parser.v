@@ -37,13 +37,89 @@ Class StrictParser {a} (p : parser a) : Prop :=
       end
   }.
 
+Ltac auto_parser :=
+  match goal with
+  | H : forall x, StrictParser (?f x) |- context[?f ?x ?input] =>
+    case_eq (f x input); [ cbn; auto
+                         | let y := fresh "y" in
+                           let output := fresh "output" in
+                           let equ := fresh "equ" in
+                           intros [y output] equ;
+                           cbn;
+                           specialize H with x;
+                           try auto_parser
+                         ]
+  | H : forall x, Parser (?f x) |- context[?f ?x ?input] =>
+    case_eq (f x input); [ cbn; auto
+                         | let y := fresh "y" in
+                           let output := fresh "output" in
+                           let equ := fresh "equ" in
+                           intros [y output] equ;
+                           cbn;
+                           specialize H with x;
+                           try auto_parser
+                         ]
+  | H : StrictParser ?p |- context[?p ?input] =>
+    case_eq (p input); [ cbn; auto
+                       | let x := fresh "x" in
+                         let output := fresh "output" in
+                         let equ := fresh "equ" in
+                         intros [x output] equ;
+                         cbn;
+                         try auto_parser
+                       ]
+  | H : StrictParser ?p, equ : ?inr _ = ?p ?input |- _ =>
+    symmetry in H;
+    try auto_parser
+  | H : StrictParser ?p, equ : ?p ?input = inr (_, ?output) |- String.length ?output <= String.length ?input =>
+    assert (String.length output < String.length input) by auto_parser; lia
+  | H : StrictParser ?p, equ : ?p ?input = inr (_, ?output) |- String.length ?output < String.length ?input =>
+    let is_strict := fresh "is_strict" in
+    destruct H as [is_strict];
+    specialize is_strict with input;
+    now rewrite equ in is_strict
+  | Hp : StrictParser ?p, Hq : StrictParser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output <= String.length ?input  =>
+    transitivity (String.length trans); try auto_parser
+  | Hp : Parser ?p, Hq : StrictParser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output < String.length ?input  =>
+    apply (PeanoNat.Nat.lt_le_trans _ (String.length trans) _); [ try auto_parser | try auto_parser ]
+  | Hp : StrictParser ?p, Hq : Parser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output < String.length ?input  =>
+    apply (PeanoNat.Nat.le_lt_trans _ (String.length trans) _); [ try auto_parser | try auto_parser ]
+  | H : forall x, Parser (?f x) |- context[?f ?x ?input] =>
+    case_eq (f x input); [ cbn; auto
+                         | let y := fresh "y" in
+                           let output := fresh "output" in
+                           let equ := fresh "equ" in
+                           intros [y output] equ;
+                           cbn;
+                           specialize H with x;
+                           try auto_parser
+                         ]
+  | H : Parser ?p |- context[?p ?input] =>
+    case_eq (p input); [ cbn; auto
+                       | let x := fresh "x" in
+                         let output := fresh "output" in
+                         let equ := fresh "equ" in
+                         intros [x output] equ;
+                         cbn;
+                         try auto_parser
+                       ]
+  | H : Parser ?p, equ : ?inr _ = ?p ?input |- _ =>
+    symmetry in H;
+    try auto_parser
+  | H : Parser ?p, equ : ?p ?input = inr (_, ?output) |- String.length ?output <= String.length ?input =>
+    let is_parser := fresh "is_parser" in
+    destruct H as [is_parser];
+    specialize is_parser with input;
+    now rewrite equ in is_parser
+  | Hp : Parser ?p, Hq : Parser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output <= String.length ?input  =>
+    transitivity (String.length trans); try auto_parser
+  end.
+
 #[program]
 Instance strict_parser {a} (p : parser a) `{StrictParser a p} : Parser p.
 
 Next Obligation.
-  destruct H as [is_strict].
-  specialize is_strict with input.
-  destruct (p input) as [_|[x res]]; lia.
+  auto_parser.
 Qed.
 
 #[program]
@@ -51,25 +127,7 @@ Instance bind_parser `(Parser a p, (forall x, @Parser b (f x)))
   : Parser (p >>= f).
 
 Next Obligation.
-  case_eq (p input).
-  + now cbn.
-  + intros [y input'] equ.
-    assert (String.length input' <= String.length input). {
-      destruct H as [is_parse].
-      specialize is_parse with input.
-      now rewrite equ in is_parse.
-    }
-    cbn.
-    case_eq (f y input').
-    ++ auto.
-    ++ intros [z output] equ'.
-       assert (String.length output <= String.length input'). {
-         specialize H0 with y.
-         destruct H0 as [is_parser].
-         specialize is_parser with input'.
-         now rewrite equ' in is_parser.
-       }
-       lia.
+  auto_parser.
 Qed.
 
 (** Note: wrt. [bind] and [StrictParser], we provide two different instances
@@ -86,25 +144,7 @@ Instance bind_strict_1 `(StrictParser a p, (forall x, @Parser b (f x)))
   : StrictParser (p >>= f)|10.
 
 Next Obligation.
-  case_eq (p input).
-  + now cbn.
-  + intros [y input'] equ.
-    assert (String.length input' < String.length input). {
-      destruct H as [is_strict].
-      specialize is_strict with input.
-      now rewrite equ in is_strict.
-    }
-    cbn.
-    case_eq (f y input').
-    ++ auto.
-    ++ intros [z output] equ'.
-       assert (String.length output <= String.length input'). {
-         specialize H0 with y.
-         destruct H0 as [is_parser].
-         specialize is_parser with input'.
-         now rewrite equ' in is_parser.
-       }
-       lia.
+  auto_parser.
 Qed.
 
 #[program]
@@ -112,25 +152,7 @@ Instance bind_strict_2 `(Parser a p, (forall x, @StrictParser b (f x)))
   : StrictParser (p >>= f)|15.
 
 Next Obligation.
-  case_eq (p input).
-  + now cbn.
-  + intros [y input'] equ.
-    assert (String.length input' <= String.length input). {
-      destruct H as [is_parser].
-      specialize is_parser with input.
-      now rewrite equ in is_parser.
-    }
-    cbn.
-    case_eq (f y input').
-    ++ auto.
-    ++ intros [z output] equ'.
-       assert (String.length output < String.length input'). {
-         specialize H0 with y.
-         destruct H0 as [is_strict].
-         specialize is_strict with input'.
-         now rewrite equ' in is_strict.
-       }
-       lia.
+  auto_parser.
 Qed.
 
 Definition with_context {a} (msg : string) (p : parser a) : parser a :=
@@ -146,9 +168,7 @@ Instance with_context_parser `(Parser a p) (msg : string)
 
 Next Obligation.
   unfold with_context.
-  destruct H as [is_parser].
-  specialize is_parser with input.
-  now destruct (p input).
+  auto_parser.
 Qed.
 
 #[program]
@@ -157,9 +177,7 @@ Instance with_context_strict `(StrictParser a p) (msg : string)
 
 Next Obligation.
   unfold with_context.
-  destruct H as [is_strict].
-  specialize is_strict with input.
-  now destruct (p input).
+  auto_parser.
 Qed.
 
 Definition alt {a} (p q : parser a) : parser a :=
@@ -177,11 +195,9 @@ Instance alt_strict `(StrictParser a p, StrictParser a q)
 
 Next Obligation.
   unfold alt.
-  destruct H as [is_strict_p].
-  destruct H0 as [is_strict_q].
-  specialize is_strict_p with input.
-  specialize is_strict_q with input.
-  now destruct (p input).
+  auto_parser.
+  intros e equ.
+  auto_parser.
 Qed.
 
 #[program]
@@ -190,11 +206,9 @@ Instance alt_parser `(Parser a p, Parser a q)
 
 Next Obligation.
   unfold alt.
-  destruct H as [is_parser_p].
-  destruct H0 as [is_parser_q].
-  specialize is_parser_p with input.
-  specialize is_parser_q with input.
-  now destruct (p input).
+  auto_parser.
+  intros.
+  auto_parser.
 Qed.
 
 Definition fail {a} (msg : string) : parser a :=
@@ -239,7 +253,7 @@ Instance if_parser `(Parser a p, Parser a q) (cond : bool)
   : Parser (if cond then p else q).
 
 Next Obligation.
-  destruct cond; apply (is_parser input).
+  destruct cond; auto_parser.
 Qed.
 
 #[program]
@@ -247,13 +261,11 @@ Instance if_strict `(StrictParser a p, StrictParser a q) (cond : bool)
   : StrictParser (if cond then p else q).
 
 Next Obligation.
-  destruct cond; apply (is_strict input).
+  destruct cond; auto_parser.
 Qed.
 
 Remark char_strict (c : ascii) : StrictParser (char c).
-
-Proof.
-  typeclasses eauto.
+typeclasses eauto.
 Qed.
 
 Fixpoint str_aux (a : string) : parser unit :=
@@ -295,9 +307,8 @@ Fixpoint many_aux {a} (acc : list a) (p : parser a) `{StrictParser a p}
   end.
 
 Next Obligation.
-  destruct H as [is_strict].
-  specialize is_strict with input.
-  now rewrite <- Heq_anonymous in is_strict.
+  symmetry in Heq_anonymous. (* FIXME: should be done by the tactic *)
+  auto_parser.
 Defined.
 
 Next Obligation.
@@ -380,16 +391,18 @@ Fixpoint many_until_aux {a b} (acc : list a)
   : error_stack + (list a * string) :=
     match q input with
     | inl _ => match p input with
-               | inl _ => inl ["p failed before q could succeed"%string]
+               | inl _ => inl ["p failed before q could succeed"]
                | inr (x, output) => many_until_aux (x :: acc) p q output
                end
     | inr (_, output) => inr (rev acc, output)
     end.
 
 Next Obligation.
-  admit.
-Admitted.
+  symmetry in Heq_anonymous; symmetry in Heq_anonymous0. (* FIXME *)
+  auto_parser.
+Qed.
 
+#[program]
 Definition many_until {a b} (p : parser a) `{StrictParser a p} (q : parser b)
   : parser (list a) :=
   many_until_aux nil p q.
@@ -443,31 +456,22 @@ Qed.
 Instance app_parser `(Parser (a -> b) f, Parser a p) : Parser (f <*> p).
 
 Next Obligation.
-  case_eq (f input).
-  + now cbn.
-  + intros [fp input'] equ.
-    assert (String.length input' <= String.length input). {
-      destruct H as [is_parser].
-      specialize is_parser with input.
-      now rewrite equ in is_parser.
-    }
-    cbn.
-    case_eq (p input').
-    ++ admit.
-    ++ admit.
-Admitted.
+  auto_parser.
+Qed.
 
 #[program]
 Instance app_strict_1 `(StrictParser (a -> b) f, Parser a p) : StrictParser (f <*> p).
 
 Next Obligation.
-Admitted.
+  auto_parser.
+Qed.
 
 #[program]
 Instance app_strict_2 `(Parser (a -> b) f, StrictParser a p) : StrictParser (f <*> p).
 
 Next Obligation.
-Admitted.
+  auto_parser.
+Qed.
 
 Instance some_until_strict `(StrictParser a p, Parser b q) : StrictParser (some_until p q).
 
