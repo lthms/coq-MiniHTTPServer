@@ -100,8 +100,6 @@ Lemma fd_set_trustworthy_request_handler `{Provide ix FILESYSTEM}
 
 Proof.
   destruct req.
-  prove_impure; auto.
-  unfold impure_map. (* FIXME: should be done by the [prove_impure] tactic *)
   now prove_impure.
 Qed.
 
@@ -115,10 +113,7 @@ Proof.
   intros ω ω' x run fd.
   destruct req.
   unroll_impure_run run.
-  + unfold impure_map in run1. (* FIXME: should be done by unroll_impure_run tactic *)
-    unroll_impure_run run1.
-
-    apply fd_set_preserving_is_file in run0.
+  + apply fd_set_preserving_is_file in run0.
     apply fd_set_preserving_read_content in run.
 
     now transitivity (ω'' fd).
