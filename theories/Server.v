@@ -105,6 +105,8 @@ Proof.
   now prove_impure.
 Qed.
 
+Hint Resolve fd_set_trustworthy_request_handler.
+
 Lemma fd_set_preserving_request_handler `{Provide ix FILESYSTEM}
     (base : list directory_id) (req : request)
   : fd_set_preserving (request_handler base req).
@@ -124,3 +126,12 @@ Proof.
 Qed.
 
 #[local] Opaque request_handler.
+#[local] Opaque http_request.
+
+Lemma fd_set_trustworthy_tcp_hander `{StrictProvide2 ix FILESYSTEM TCP} (ω : fd_set)
+  : trustworthy_impure fd_set_specs ω http_server.
+
+Proof.
+  prove_impure.
+  destruct (http_request x2); now prove_impure.
+Qed.
