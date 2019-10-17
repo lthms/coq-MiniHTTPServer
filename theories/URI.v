@@ -123,17 +123,34 @@ Proof.
   constructor.
 Qed.
 
+#[local]
+Remark canonical_canonicalize_aux_cons_equ
+    (d : list directory_id) (canon : canonical d) (acc : list directory_id)
+  : canonicalize_aux acc d = List.app (rev acc) (canonicalize_aux nil d).
+
+Proof.
+  revert acc.
+  induction d.
+  + intros acc.
+    now rewrite <- app_nil_end.
+  + intros acc.
+    cbn.
+    inversion canon; subst.
+    rewrite IHd; auto.
+    cbn.
+    rewrite <- app_assoc.
+    now erewrite (IHd canonical_rst [Dirname s]).
+Qed.
+
 Remark canonical_canonicalize_cons_equ (s : string)
     (d : list directory_id) (canon : canonical d)
   : canonicalize (Dirname s :: d) = Dirname s :: canonicalize d.
 
 Proof.
-  induction d.
-  + reflexivity.
-  + inversion canon; subst.
-    rename s0 into s'.
-    cbn.
-Admitted.
+  unfold canonicalize.
+  cbn.
+  now rewrite canonical_canonicalize_aux_cons_equ.
+Qed.
 
 Lemma canonicalize_canonical_equ (d : list directory_id) (canon : canonical d)
   : canonicalize d = d.
