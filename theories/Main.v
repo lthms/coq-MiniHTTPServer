@@ -1,4 +1,5 @@
 From Praecia Require Import TCP.
+From FreeSpec Require Exec.
 
 Generalizable All Variables.
 
@@ -12,3 +13,5 @@ Definition main `{Provide ix TCP} : impure ix unit :=
      close_socket client;
      close_socket server
   end.
+
+Exec main.
