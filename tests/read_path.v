@@ -6,8 +6,11 @@ From Praecia Require Import Parser HTTP URI.
 #[local] Open Scope string_scope.
 
 Exec
-  match parse http_request "GET /test/../.././foo HTTP/1.1" with
-  | inl _ => echo "Error while parsing"
+  match parse http_request "GET /test/../.././ HTTP/1.1" with
   | inr (Get uri) => echo ("Parsing succeeded: "
-                           ++ fromMaybe "no file required" (filename uri))
+                           ++ uri_to_path (make_uri (canonicalize (dirname uri))
+                                                    (filename uri)))
+
+  | inl (x :: _) => echo ("Error while parsing: " ++ x)
+  | inl _ => echo "Error while parsing"
   end.

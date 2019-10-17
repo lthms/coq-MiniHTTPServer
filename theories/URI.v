@@ -146,13 +146,16 @@ Qed.
 (** * Parsing URI *)
 
 Definition dir_id_sep : parser unit :=
-  peak (eoi <|> ((char " " <|> char "/") *> pure tt)).
+  eoi <|> ((char "/" <|> char " ") *> pure tt).
+
+Definition uri_char : parser ascii :=
+  ensure read_char (fun x => negb (eqb x " " || eqb x "/")).
 
 Definition dirid : parser directory_id :=
   many (char "/") *>
   (str ".." *> peak dir_id_sep *> pure Parent)
   <|> (char "." *> peak dir_id_sep *> pure Current)
-  <|> (do var name <- some_until read_char (peak dir_id_sep) in
+  <|> (do var name <- some_until uri_char (peak dir_id_sep) in
           peak (char "/");
           pure (Dirname (of_ascii_list name))
        end).
@@ -161,11 +164,20 @@ Definition dirid : parser directory_id :=
 Definition path_dirname : parser (list directory_id) :=
   many dirid.
 
+Definition path_filename : parser (option string) :=
+  do
+    var candidat <- of_ascii_list <$> many uri_char in
+    match candidat with
+    | "" => pure None
+    | "." | ".." => fail ". or .. are reserved directory names"
+    | x => pure (Some x)
+    end
+  end.
+
 Definition read_uri : parser uri :=
   do var dirname <- path_dirname in
      many (char "/");
-     var maybe_filename <- many_until read_char (char " ") in
-     pure (make_uri dirname (if List.length maybe_filename =? 0
-                             then None
-                             else Some (of_ascii_list maybe_filename)))
+     var filename <- path_filename in
+
+     pure (make_uri dirname filename)
   end.
