@@ -309,7 +309,7 @@ Fixpoint many_aux {a} (acc : list a) (p : parser a) `{StrictParser a p}
 Next Obligation.
   symmetry in Heq_anonymous. (* FIXME: should be done by the tactic *)
   auto_parser.
-Defined.
+Qed.
 
 Next Obligation.
   destruct many_aux as [y input'].
@@ -318,7 +318,7 @@ Next Obligation.
   specialize is_strict with input.
   rewrite <- Heq_anonymous in is_strict.
   lia.
-Defined.
+Qed.
 
 (** Note: we favor this implementation of [many] over
     [fun (input : string) => inr (many_aux nil p input)] because with the
