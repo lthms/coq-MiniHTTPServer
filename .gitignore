@@ -1,6 +1,7 @@
 Makefile*
 .coqdeps.d
 
+.lia.cache
 .*.aux
 *.vo
 *.glob
