@@ -287,8 +287,8 @@ Definition str (target : string) : parser string :=
 
 #[local, program]
 Fixpoint many_aux {a} (acc : list a) (p : parser a) `{StrictParser a p}
-    (input : string) {measure (String.length input)}
-  : list a * string :=
+    (input : string) {measure (String.length input) lt}
+  : { res : list a * string | String.length (snd res) <= String.length input } :=
   match p input with
   | inl _ => (rev acc, input)
   | inr (x, output) => many_aux (x :: acc) p output
@@ -298,23 +298,39 @@ Next Obligation.
   destruct H as [is_strict].
   specialize is_strict with input.
   now rewrite <- Heq_anonymous in is_strict.
-Qed.
+Defined.
 
+Next Obligation.
+  destruct many_aux as [y input'].
+  transitivity (String.length output); auto.
+  destruct H as [is_strict].
+  specialize is_strict with input.
+  rewrite <- Heq_anonymous in is_strict.
+  lia.
+Defined.
+
+(** Note: we favor this implementation of [many] over
+    [fun (input : string) => inr (many_aux nil p input)] because with the
+    latter, Coq typeclass inference algorithm struggles _a lot_ when it finds a
+    [many] combinator. *)
+
+#[program]
 Definition many {a} (p : parser a) `{StrictParser a p} : parser (list a) :=
   fun (input : string) =>
-     match many_aux nil p input with
-     | (x, rst) => inr (x, rst)
-     end.
+    match many_aux nil p input with
+    | (x, rst) => inr (x, rst)
+    end.
 
 #[program]
 Instance many_parser `(StrictParser a p) : Parser (many p).
 
 Next Obligation.
   unfold many.
-  case_eq (many_aux nil p input); intros x rst equ.
-  (* TODO *)
-  admit.
-Admitted.
+  destruct many_aux.
+  revert x l.
+  intros [x output] l.
+  now unfold proj1_sig.
+Qed.
 
 Definition some {a} (p : parser a) `{StrictParser a p} : parser (list a) :=
   do var x <- p in
