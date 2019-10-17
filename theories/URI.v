@@ -46,13 +46,53 @@ Lemma canonical_canonical_tl (d : list directory_id)
   : canonical d -> canonical (tl d).
 
 Proof.
-Admitted.
+  intros canon.
+  destruct d as [| x rst].
+  + auto.
+  + now inversion canon.
+Qed.
+
+Lemma canonical_canonical_cons (a : directory_id) (d : list directory_id)
+  : canonical (a :: d) <-> canonical [a] /\ canonical d.
+
+Proof.
+  split.
+  + intros canon; inversion canon; subst.
+    split; repeat constructor.
+    exact canonical_rst.
+  + intros [c1 c2].
+    inversion c1; subst.
+    constructor; auto.
+Qed.
+
+Lemma canonical_canonical_app (d1 d2 : list directory_id)
+  : canonical d1 /\ canonical d2 <-> canonical (d1 ++ d2).
+
+Proof.
+  revert d2.
+  induction d1; intros d2.
+  + cbn.
+    split.
+    ++ now intros [_ exact].
+    ++ intros exact; split; [ constructor | auto ].
+  + cbn.
+    rewrite (canonical_canonical_cons a d1).
+    rewrite (canonical_canonical_cons a (d1 ++ d2)).
+    rewrite <- IHd1.
+    now rewrite and_assoc.
+Qed.
 
 Lemma canonical_canonical_rev (d : list directory_id)
   : canonical d <-> canonical (rev d).
 
 Proof.
-Admitted.
+  induction d.
+  + reflexivity.
+  + cbn.
+    rewrite canonical_canonical_cons.
+    rewrite <- (canonical_canonical_app (rev d) [a]).
+    now rewrite IHd.
+Qed.
 
 #[local]
 Lemma canonicalize_aux_canonical (d acc : list directory_id)
@@ -137,7 +177,7 @@ Defined.
 
 #[program]
 Definition uri_to_path (u : uri) : string :=
-  uri_to_path_aux (canonicalize (dirname u)) _ ++ fromMaybe ""%string (filename u).
+  "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ fromMaybe ""%string (filename u).
 
 Next Obligation.
   apply canonicalize_canonical.
