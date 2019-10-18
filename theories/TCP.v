@@ -42,16 +42,26 @@ Definition close_socket `{Provide ix TCP} (socket : socket_descriptor) : impure 
 
 Declare ML Module "praecia_plugin".
 
+Fixpoint repeatM `{Monad m} {a} (n : nat) (p : m a) : m unit :=
+  match n with
+  | O => pure tt
+  | S n => p >>= fun _ => repeatM n p
+  end.
+
+Arguments repeatM [m _ _] !n p.
+
 Definition tcp_server `{Provide ix TCP} (handler : string -> impure ix string)
   : impure ix unit :=
   do var server <- new_tcp_socket "127.0.0.1:8088" in
      listen_incoming_connection server;
 
-     var client <- accept_connection server in
-     var req <- read_socket client in
-     var res <- handler req in
-     write_socket client res;
-     close_socket client;
+     repeatM 100 do
+       var client <- accept_connection server in
+       var req <- read_socket client in
+       var res <- handler req in
+       write_socket client res;
+       close_socket client
+     end;
 
      close_socket server
   end.

@@ -1,4 +1,6 @@
 From Praecia Require Import Parser URI.
+From Prelude Require Import Z.
+From Coq Require Import ZArith.
 
 Import ListNotations.
 #[local] Open Scope string_scope.
@@ -25,12 +27,15 @@ Record response := make_response { code : status
 
 #[local] Open Scope string_scope.
 
-Definition newline := String "010" "".
+Definition crlf := String "013" (String "010" EmptyString).
 
 Definition response_to_string (res : response) : string :=
-  "HTTP/1.1 " ++ status_to_string (code res) ++ " Reason phrase" ++ newline ++
-  newline ++
-  body res.
+  "HTTP/1.1 " ++ status_to_string (code res) ++ " Response" ++ crlf ++
+  "Content-Length: " ++ (string_of_Z (Z.of_nat (String.length (body res)))) ++ crlf ++
+  "Connection: Closed" ++ crlf ++
+  crlf ++
+  body res ++ crlf ++
+  crlf.
 
 Definition http_request : parser request :=
   Get <$> (str "GET" *> whitespaces *> read_uri <* whitespaces <* str "HTTP/1.1").

@@ -41,6 +41,7 @@ Definition http_server `{Provide ix FILESYSTEM, Provide ix TCP}
   : impure ix unit :=
   tcp_server (tcp_handler [Dirname "opt"; Dirname "praecia"]).
 
+(*
 Lemma fd_set_trustworthy_read_content `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
   : trustworthy_impure fd_set_specs ω (read_content path).
 
@@ -120,3 +121,4 @@ Proof.
   prove_impure.
   destruct (http_request x2); now prove_impure.
 Qed.
+*)

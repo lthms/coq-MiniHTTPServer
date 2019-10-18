@@ -16,10 +16,4 @@ Definition handler {ix} req : impure ix string :=
       end
   in pure (response_to_string res).
 
-Definition main' `{Provide ix TCP, Provide ix CONSOLE} : impure ix unit :=
-  tcp_server (fun x => echo x *> pure x).
-
-Definition main : impure (TCP <+> CONSOLE) unit :=
-  tcp_server handler.
-
-Exec main.
+Exec (tcp_server handler).
