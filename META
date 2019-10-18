@@ -1,0 +1,12 @@
+package "praecia" (
+
+    description = "Praecia"
+    version     = "8.10"
+
+    requires    = "freespec-exec"
+    directory   = "src"
+
+    archive(byte)    = "praecia_plugin.cmo"
+    archive(native)  = "praecia_plugin.cmx"
+
+)

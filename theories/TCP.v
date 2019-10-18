@@ -1,5 +1,6 @@
 From Coq Require Export String.
-From FreeSpec Require Export Core.
+From FreeSpec Require Export Core Exec.
+
 
 Generalizable All Variables.
 
@@ -30,3 +31,5 @@ Definition write_socket `{Provide ix TCP} (socket : socket_descriptor) (msg : st
 
 Definition close_socket `{Provide ix TCP} (socket : socket_descriptor) : impure ix unit :=
   request (CloseTCPSocket socket).
+
+Declare ML Module "praecia_plugin".
