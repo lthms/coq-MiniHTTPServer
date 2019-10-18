@@ -60,19 +60,11 @@ let accept_connection = function
 
 let max_buffer_len = 1024
 
-let chunk_size = 1
-
 let read_all_from fd =
-  let chunk = Bytes.create chunk_size in
+  let chunk = Bytes.create 1 in
   let buffer = Buffer.create max_buffer_len in
   let rec aux () =
-    let n =
-      try Unix.(read fd chunk 0 chunk_size) with e ->
-        Printf.eprintf
-          "Warning: Unhandled exception %s.\n"
-          (Printexc.to_string e);
-        0
-    in
+    let n = Unix.(handle_unix_error (fun () -> read fd chunk 0 1)) () in
     if n > 0 then Buffer.add_subbytes buffer chunk 0 n;
     if Bytes.get chunk 0 <> '\n' then aux () else Buffer.contents buffer
   in
@@ -110,10 +102,10 @@ let close_tcp_socket = function
 
 let install_interface =
   register_interface path [
-      ("NewTCPSocket", new_tcp_socket);
+      ("NewTCPSocket",             new_tcp_socket);
       ("ListenIncomingConnection", listen_incoming_connection);
-      ("AcceptConnection", accept_connection);
-      ("ReadSocket", read_socket);
-      ("WriteSocket", write_socket);
-      ("CloseTCPSocket", close_tcp_socket)
+      ("AcceptConnection",         accept_connection);
+      ("ReadSocket",               read_socket);
+      ("WriteSocket",              write_socket);
+      ("CloseTCPSocket",           close_tcp_socket)
     ]
