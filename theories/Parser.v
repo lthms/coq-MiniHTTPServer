@@ -490,7 +490,7 @@ Next Obligation.
   induction input; now cbn.
 Qed.
 
-Definition peak {a} (p : parser a) : parser a :=
+Definition peek {a} (p : parser a) : parser a :=
   fun (input : string) =>
     match p input with
     | inl x => inl x
@@ -498,9 +498,9 @@ Definition peak {a} (p : parser a) : parser a :=
     end.
 
 #[program]
-Instance peak_parser {a} (p : parser a) : Parser (peak p).
+Instance peek_parser {a} (p : parser a) : Parser (peek p).
 
 Next Obligation.
-  unfold peak.
+  unfold peek.
   destruct (p input) as [ _ | [x output] ]; auto.
 Qed.

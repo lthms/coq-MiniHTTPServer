@@ -210,10 +210,10 @@ Definition uri_char : parser ascii :=
 
 Definition dirid : parser directory_id :=
   many (char "/") *>
-  (str ".." *> peak dir_id_sep *> pure Parent)
-  <|> (char "." *> peak dir_id_sep *> pure Current)
-  <|> (do var name <- some_until uri_char (peak dir_id_sep) in
-          peak (char "/");
+  (str ".." *> peek dir_id_sep *> pure Parent)
+  <|> (char "." *> peek dir_id_sep *> pure Current)
+  <|> (do var name <- some_until uri_char (peek dir_id_sep) in
+          peek (char "/");
           pure (Dirname (of_ascii_list name))
        end).
 
