@@ -42,6 +42,7 @@ let new_tcp_socket = function
      let addr = string_of_coqstr addr in
      let hostname, port = parse_address addr in
      let fd = Unix.(socket PF_INET SOCK_STREAM 0) in
+     Unix.setsockopt fd SO_REUSEADDR true;
      Unix.(bind fd (ADDR_INET (hostname, port)));
      constr_of_socket fd
   | _ -> assert false
