@@ -1,4 +1,4 @@
-From Coq Require Export String Ascii Lia Program.Wf List.
+From Coq Require Export String Ascii Program.Wf List.
 From Prelude Require Export Control.
 From Prelude Require Import State Classes Sum Equality Option.
 
@@ -72,7 +72,7 @@ Ltac auto_parser :=
     symmetry in H;
     try auto_parser
   | H : StrictParser ?p, equ : ?p ?input = inr (_, ?output) |- String.length ?output <= String.length ?input =>
-    assert (String.length output < String.length input) by auto_parser; lia
+    assert (String.length output < String.length input) by auto_parser; now apply PeanoNat.Nat.lt_le_incl
   | H : StrictParser ?p, equ : ?p ?input = inr (_, ?output) |- String.length ?output < String.length ?input =>
     let is_strict := fresh "is_strict" in
     destruct H as [is_strict];
@@ -238,7 +238,8 @@ Next Obligation.
   cbn.
   destruct input.
   + now cbn.
-  + cbn. lia.
+  + cbn.
+    constructor.
 Qed.
 
 Definition char (a : ascii) : parser ascii :=
@@ -317,7 +318,7 @@ Next Obligation.
   destruct H as [is_strict].
   specialize is_strict with input.
   rewrite <- Heq_anonymous in is_strict.
-  lia.
+  now apply PeanoNat.Nat.lt_le_incl.
 Qed.
 
 (** Note: we favor this implementation of [many] over
