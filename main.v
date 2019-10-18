@@ -1,17 +1,20 @@
-From Praecia Require Import TCP.
+From Coq Require Import List.
+From Praecia Require Import TCP Parser HTTP URI Server.
 From FreeSpec Require Exec.
+
+Import ListNotations.
 
 Generalizable All Variables.
 
+Definition handler {ix} req : impure ix string :=
+  let res :=
+      match parse http_request req with
+      | inl _ => make_response client_error_BadRequest ""
+      | inr (Get uri) =>
+        let resource := sandbox ([Dirname "opt"; Dirname "praecia"]) uri in
+        make_response success_OK (uri_to_path resource)
+      end
+  in pure (response_to_string res).
+
 Definition main `{Provide ix TCP} : impure ix unit :=
-  do var server <- new_tcp_socket "127.0.0.1:8080" in
-     listen_incoming_connection server;
-
-     var client <- accept_connection server in
-     read_socket client >>= write_socket client;
-
-     close_socket client;
-     close_socket server
-  end.
-
-Exec main.
+  tcp_server handler.

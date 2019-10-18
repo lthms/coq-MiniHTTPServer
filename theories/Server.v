@@ -39,17 +39,7 @@ Definition tcp_handler `{Provide ix FILESYSTEM}
 
 Definition http_server `{Provide ix FILESYSTEM, Provide ix TCP}
   : impure ix unit :=
-  do var server <- new_tcp_socket "localhost:8000" in
-     listen_incoming_connection server;
-
-     var client <- accept_connection server in
-     var req <- read_socket client in
-     var res <- tcp_handler [Dirname "opt"; Dirname "praecia"] req in
-
-     write_socket client res;
-     close_socket client;
-     close_socket server
-  end.
+  tcp_server (tcp_handler [Dirname "opt"; Dirname "praecia"]).
 
 Lemma fd_set_trustworthy_read_content `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
   : trustworthy_impure fd_set_specs ω (read_content path).

@@ -41,3 +41,17 @@ Definition close_socket `{Provide ix TCP} (socket : socket_descriptor) : impure 
   request (CloseTCPSocket socket).
 
 Declare ML Module "praecia_plugin".
+
+Definition tcp_server `{Provide ix TCP} (handler : string -> impure ix string)
+  : impure ix unit :=
+  do var server <- new_tcp_socket "127.0.0.1:8088" in
+     listen_incoming_connection server;
+
+     var client <- accept_connection server in
+     var req <- read_socket client in
+     var res <- handler req in
+     write_socket client res;
+     close_socket client;
+
+     close_socket server
+  end.
