@@ -41,7 +41,6 @@ Definition http_server `{Provide ix FILESYSTEM, Provide ix TCP}
   : impure ix unit :=
   tcp_server (tcp_handler [Dirname "opt"; Dirname "praecia"]).
 
-(*
 Lemma fd_set_trustworthy_read_content `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
   : trustworthy_impure fd_set_specs ω (read_content path).
 
@@ -113,12 +112,43 @@ Qed.
 
 #[local] Opaque request_handler.
 #[local] Opaque http_request.
+#[local] Opaque response_to_string.
+
+From Coq Require Import FunctionalExtensionality.
+
+Lemma repeatM_preserving_trustworthy {a} `{Provide ix FILESYSTEM}
+    (p : impure ix a) (ω : fd_set)
+    (fd_trust : trustworthy_impure fd_set_specs ω p)
+    (fd_preserving : fd_set_preserving p)
+    (n : nat)
+  : trustworthy_impure fd_set_specs ω (repeatM n p).
+
+Proof.
+  induction n.
+  + prove_impure.
+  + prove_impure.
+    ++ exact fd_trust.
+    ++ assert (equ : ω = w). {
+         apply functional_extensionality.
+         intros fd'.
+         eapply (fd_preserving ω).
+         exact Hrun.
+       }
+       rewrite <- equ.
+       apply IHn.
+Qed.
+
+#[local] Opaque repeatM.
 
 Lemma fd_set_trustworthy_tcp_hander `{StrictProvide2 ix FILESYSTEM TCP} (ω : fd_set)
   : trustworthy_impure fd_set_specs ω http_server.
 
 Proof.
   prove_impure.
-  destruct (http_request x2); now prove_impure.
-Qed.
-*)
+  apply repeatM_preserving_trustworthy.
+  + prove_impure.
+    destruct (http_request x2); now prove_impure.
+  + intros ω' ω'' [] run fd.
+    (* FIXME: there is a strange setoid error when using [unroll_impure_run
+              run]. *)
+Admitted.

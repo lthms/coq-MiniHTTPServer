@@ -48,8 +48,6 @@ Fixpoint repeatM `{Monad m} {a} (n : nat) (p : m a) : m unit :=
   | S n => p >>= fun _ => repeatM n p
   end.
 
-Arguments repeatM [m _ _] !n p.
-
 Definition tcp_server `{Provide ix TCP} (handler : string -> impure ix string)
   : impure ix unit :=
   do var server <- new_tcp_socket "127.0.0.1:8088" in
@@ -57,9 +55,11 @@ Definition tcp_server `{Provide ix TCP} (handler : string -> impure ix string)
 
      repeatM 100 do
        var client <- accept_connection server in
+
        var req <- read_socket client in
        var res <- handler req in
        write_socket client res;
+
        close_socket client
      end;
 
