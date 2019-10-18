@@ -61,12 +61,12 @@ let accept_connection = function
 let max_buffer_len = 1024
 
 let read_all_from fd =
-  let chunk = Bytes.create 1 in
+  let char = Bytes.create 1 in
   let buffer = Buffer.create max_buffer_len in
   let rec aux () =
-    let n = Unix.(handle_unix_error (fun () -> read fd chunk 0 1)) () in
-    if n > 0 then Buffer.add_subbytes buffer chunk 0 n;
-    if Bytes.get chunk 0 <> '\n' then aux () else Buffer.contents buffer
+    let n = Unix.(handle_unix_error (fun () -> read fd char 0 1)) () in
+    if n > 0 then Buffer.add_subbytes buffer char 0 n;
+    if Bytes.get char 0 <> '\n' && n > 0 then aux () else Buffer.contents buffer
   in
   aux ()
 
