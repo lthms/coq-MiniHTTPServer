@@ -20,7 +20,6 @@ Definition main' `{Provide ix TCP, Provide ix CONSOLE} : impure ix unit :=
   tcp_server (fun x => echo x *> pure x).
 
 Definition main : impure (TCP <+> CONSOLE) unit :=
-  echo "hi" *> echo "test
-".
+  tcp_server handler.
 
 Exec main.
