@@ -1,6 +1,6 @@
 From Coq Require Import List.
 From Praecia Require Import TCP Parser HTTP URI Server.
-From FreeSpec Require Exec.
+From FreeSpec Require Import Exec Console.
 
 Import ListNotations.
 
@@ -16,5 +16,11 @@ Definition handler {ix} req : impure ix string :=
       end
   in pure (response_to_string res).
 
-Definition main `{Provide ix TCP} : impure ix unit :=
-  tcp_server handler.
+Definition main' `{Provide ix TCP, Provide ix CONSOLE} : impure ix unit :=
+  tcp_server (fun x => echo x *> pure x).
+
+Definition main : impure (TCP <+> CONSOLE) unit :=
+  echo "hi" *> echo "test
+".
+
+Exec main.
