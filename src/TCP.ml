@@ -81,9 +81,7 @@ let read_socket = function
 let write_all_from data fd =
   let rec aux ofs len =
     let n = Unix.write fd data ofs len in
-    if n < len then (
-      aux (ofs + n) (len - n)
-    )
+    if n < len then aux (ofs + n) (len - n)
   in
   aux 0 (Bytes.length data)
 
