@@ -22,7 +22,7 @@ open Freespec_exec.Coqstr
 open Freespec_exec.Extends
 open Freespec_exec.Coqunit
 
-let path = "praecia.tcp.TCP"
+let path = "praecia.tcp"
 
 let parse_address addr =
   match Str.(split (regexp ":") addr) with
@@ -60,7 +60,7 @@ let accept_connection = function
 
 let max_buffer_len = 1024
 
-let chunk_size = 32
+let chunk_size = 1
 
 let read_all_from fd =
   let chunk = Bytes.create chunk_size in
@@ -73,10 +73,8 @@ let read_all_from fd =
           (Printexc.to_string e);
         0
     in
-    if n > 0 then (
-      Buffer.add_subbytes buffer chunk 0 n;
-      aux ()
-    ) else Buffer.contents buffer
+    if n > 0 then Buffer.add_subbytes buffer chunk 0 n;
+    if Bytes.get chunk 0 <> '\n' then aux () else Buffer.contents buffer
   in
   aux ()
 
