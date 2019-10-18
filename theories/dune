@@ -1,0 +1,6 @@
+(coq.theory
+  (name Praecia)
+  (public_name praecia.theory)
+  (libraries praecia.plugin))
+
+(include_subdirs qualified)

@@ -4,7 +4,7 @@ From FreeSpec Require Exec.
 Generalizable All Variables.
 
 Definition main `{Provide ix TCP} : impure ix unit :=
-  do var server <- new_tcp_socket "localhost:8000" in
+  do var server <- new_tcp_socket "127.0.0.1:8080" in
      listen_incoming_connection server;
 
      var client <- accept_connection server in

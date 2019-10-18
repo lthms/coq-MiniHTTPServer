@@ -1,12 +1,11 @@
 -I src
 -R theories Praecia
 
+src/TCP.ml
+src/praecia_plugin.mlpack
+
 theories/TCP.v
 theories/FileSystem.v
 theories/Parser.v
 theories/URI.v
 theories/HTTP.v
-theories/Main.v
-
-src/TCP.ml
-src/praecia_plugin.mlpack

@@ -5,3 +5,7 @@ Makefile*
 .*.aux
 *.vo
 *.glob
+
+_build
+praecia.install
+.merlin

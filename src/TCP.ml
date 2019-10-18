@@ -22,7 +22,7 @@ open Freespec_exec.Coqstr
 open Freespec_exec.Extends
 open Freespec_exec.Coqunit
 
-let path = "praecia.TCP.TCP"
+let path = "praecia.tcp"
 
 let parse_address addr =
   match Str.(split (regexp ":") addr) with

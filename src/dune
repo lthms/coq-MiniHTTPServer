@@ -1,0 +1,5 @@
+(library
+  (name praecia_plugin)
+  (public_name praecia.plugin)
+  (flags :standard -rectypes -w -27)
+  (libraries freespec-exec.plugin))
