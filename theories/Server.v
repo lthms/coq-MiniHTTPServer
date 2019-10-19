@@ -149,7 +149,7 @@ Proof.
   + prove_impure.
     destruct (http_request x2); now prove_impure.
   + intros ω' ω'' [] run fd.
-    unroll_impure_run_aux run.
+    unroll_impure_run run.
     destruct (http_request x2).
     ++ now unroll_impure_run run.
     ++ unroll_impure_run run.
