@@ -149,6 +149,9 @@ Proof.
   + prove_impure.
     destruct (http_request x2); now prove_impure.
   + intros ω' ω'' [] run fd.
-    (* FIXME: there is a strange setoid error when using [unroll_impure_run
-              run]. *)
-Admitted.
+    unroll_impure_run_aux run.
+    destruct (http_request x2).
+    ++ now unroll_impure_run run.
+    ++ unroll_impure_run run.
+       rewrite fd_set_preserving_request_handler; eauto.
+Qed.
