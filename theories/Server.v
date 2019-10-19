@@ -6,6 +6,8 @@ Import ListNotations.
 #[local] Open Scope string_scope.
 #[local] Open Scope prelude_scope.
 
+#[local] Opaque http_request.
+
 Generalizable All Variables.
 
 Definition sandbox (base : list directory_id) (req : uri) : uri :=
@@ -84,37 +86,67 @@ Qed.
 
 #[local] Opaque is_file.
 
-Lemma fd_set_trustworthy_request_handler `{Provide ix FILESYSTEM}
-    (base : list directory_id) (req : request) (ω : fd_set)
-  : trustworthy_impure fd_set_specs ω (request_handler base req).
+Lemma fd_set_trustworthy_tcp_handler `{Provide ix FILESYSTEM}
+    (base : list directory_id) (req : string) (ω : fd_set)
+  : trustworthy_impure fd_set_specs ω (tcp_handler base req).
 
 Proof.
-  destruct req.
-  now prove_impure.
+  prove_impure.
+  destruct (http_request req).
+  + prove_impure.
+  + prove_impure.
+    destruct (fst p).
+    now prove_impure.
 Qed.
 
-Hint Resolve fd_set_trustworthy_request_handler.
+Hint Resolve fd_set_trustworthy_tcp_handler.
 
-Lemma fd_set_preserving_request_handler `{Provide ix FILESYSTEM}
-    (base : list directory_id) (req : request)
-  : fd_set_preserving (request_handler base req).
+Lemma fd_set_preserving_tcp_handler `{Provide ix FILESYSTEM}
+    (base : list directory_id) (req : string)
+  : fd_set_preserving (tcp_handler base req).
 
 Proof.
   intros ω ω' x run fd.
-  destruct req.
   unroll_impure_run run.
-  + apply fd_set_preserving_is_file in run0.
-    apply fd_set_preserving_read_content in run.
+  destruct (http_request req).
+  + now unroll_impure_run run0.
+  + destruct p as [[res_id] req'].
+    unroll_impure_run run0.
+    ++ apply fd_set_preserving_is_file in run.
+       apply fd_set_preserving_read_content in run0.
 
-    now transitivity (ω'' fd).
-  + now apply fd_set_preserving_is_file in run0.
+       now transitivity (ω'' fd).
+    ++ now apply fd_set_preserving_is_file in run.
 Qed.
 
-#[local] Opaque request_handler.
-#[local] Opaque http_request.
+Hint Resolve fd_set_preserving_tcp_handler.
+
+#[local] Opaque tcp_handler.
 #[local] Opaque response_to_string.
 
 From Coq Require Import FunctionalExtensionality.
+
+Lemma fd_set_preserving_repeatM {a} `{Provide ix FILESYSTEM}
+    (p : impure ix a)
+    (fd_preserving : fd_set_preserving p)
+    (n : nat)
+  : fd_set_preserving (repeatM n p).
+
+Proof.
+  intros ω ω' fd run.
+  induction n.
+  + now unroll_impure_run run.
+  + unroll_impure_run run.
+    apply IHn.
+    assert (equ : ω = ω''). {
+      apply functional_extensionality.
+      intros fd'.
+      eapply (fd_preserving ω); eauto.
+    }
+    now rewrite equ.
+Qed.
+
+Hint Resolve fd_set_preserving_repeatM.
 
 Lemma repeatM_preserving_trustworthy {a} `{Provide ix FILESYSTEM}
     (p : impure ix a) (ω : fd_set)
@@ -140,7 +172,29 @@ Qed.
 
 #[local] Opaque repeatM.
 
-Lemma fd_set_trustworthy_tcp_hander `{StrictProvide2 ix FILESYSTEM TCP} (ω : fd_set)
+Lemma fd_set_preserving_tcp_server_repeat_routine
+   `{Provide ix TCP, MayProvide ix FILESYSTEM, Distinguish ix TCP FILESYSTEM}
+    (server : socket_descriptor)
+    (handler : string -> impure ix string)
+    (preserve : forall (req : string), fd_set_preserving (handler req))
+  : fd_set_preserving (do var client <- accept_connection server in
+
+                          var req <- read_socket client in
+                          var res <- handler req in
+                          write_socket client res;
+
+                          close_socket client
+                       end).
+
+Proof.
+  intros ω ω' b run fd.
+  unroll_impure_run run.
+  now apply preserve in run.
+Qed.
+
+Hint Resolve fd_set_preserving_tcp_server_repeat_routine.
+
+Lemma fd_set_trustworthy_http_server `{StrictProvide2 ix FILESYSTEM TCP} (ω : fd_set)
   : trustworthy_impure fd_set_specs ω http_server.
 
 Proof.
@@ -149,9 +203,15 @@ Proof.
   + prove_impure.
     destruct (http_request x2); now prove_impure.
   + intros ω' ω'' [] run fd.
-    unroll_impure_run run.
-    destruct (http_request x2).
-    ++ now unroll_impure_run run.
-    ++ unroll_impure_run run.
-       rewrite fd_set_preserving_request_handler; eauto.
+    apply fd_set_preserving_tcp_server_repeat_routine in run; auto.
+Qed.
+
+Lemma fd_set_preserving_http_server `{StrictProvide2 ix FILESYSTEM TCP}
+  : fd_set_preserving http_server.
+
+Proof.
+  intros ω ω' x run fd.
+  unroll_impure_run run.
+  apply fd_set_preserving_repeatM in run; auto.
+  now apply fd_set_preserving_tcp_server_repeat_routine.
 Qed.

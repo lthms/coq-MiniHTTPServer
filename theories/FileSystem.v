@@ -115,6 +115,6 @@ Definition fd_set_specs : specs FILESYSTEM fd_set :=
    ; promises := fd_set_callee_obligation
   |}.
 
-Definition fd_set_preserving {a} `{Provide ix FILESYSTEM} (p : impure ix a) :=
+Definition fd_set_preserving {a} `{MayProvide ix FILESYSTEM} (p : impure ix a) :=
   forall (ω ω' : fd_set) (x : a),
     trustworthy_run fd_set_specs p ω ω' x -> forall fd, ω fd = ω' fd.
