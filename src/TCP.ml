@@ -21,8 +21,9 @@
 open Freespec_exec.Coqstr
 open Freespec_exec.Extends
 open Freespec_exec.Coqunit
+open Utils
 
-let path = "praecia.tcp"
+let path = "praecia.filesystem"
 
 let parse_address addr =
   match Str.(split (regexp ":") addr) with
@@ -58,18 +59,6 @@ let accept_connection = function
      let new_socket, _ = Unix.accept (socket_of_constr socket) in
      constr_of_socket new_socket
   | _ -> assert false
-
-let max_buffer_len = 1024
-
-let read_all_from fd =
-  let char = Bytes.create 1 in
-  let buffer = Buffer.create max_buffer_len in
-  let rec aux () =
-    let n = Unix.(handle_unix_error (fun () -> read fd char 0 1)) () in
-    if n > 0 then Buffer.add_subbytes buffer char 0 n;
-    if Bytes.get char 0 <> '\n' && n > 0 then aux () else Buffer.contents buffer
-  in
-  aux ()
 
 let read_socket = function
   | [socket] ->

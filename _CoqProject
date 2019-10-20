@@ -1,7 +1,9 @@
 -I src
 -R theories Praecia
 
+src/utils.ml
 src/TCP.ml
+src/fileSystem.ml
 src/praecia_plugin.mlpack
 
 theories/TCP.v

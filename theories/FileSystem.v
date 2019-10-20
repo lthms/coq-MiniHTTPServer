@@ -14,6 +14,12 @@ Inductive FILESYSTEM : interface :=
 | Read (file : file_descriptor) : FILESYSTEM string
 | Close (file : file_descriptor) : FILESYSTEM unit.
 
+Register FILESYSTEM as praecia.filesystem.type.
+Register Open as praecia.filesystem.Open.
+Register IsFile as praecia.filesystem.isFile.
+Register Read as praecia.filesystem.Read.
+Register Close as praecia.filesystem.Close.
+
 Definition open `{Provide ix FILESYSTEM} (path : string) : impure ix file_descriptor :=
   request (Open path).
 
