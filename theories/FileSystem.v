@@ -16,7 +16,7 @@ Inductive FILESYSTEM : interface :=
 
 Register FILESYSTEM as praecia.filesystem.type.
 Register Open as praecia.filesystem.Open.
-Register IsFile as praecia.filesystem.isFile.
+Register IsFile as praecia.filesystem.IsFile.
 Register Read as praecia.filesystem.Read.
 Register Close as praecia.filesystem.Close.
 
