@@ -18,11 +18,11 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *)
 
-let max_buffer_len = 1024
+let initial_buffer_len = 1024
 
 let read_all_from ?(line = true) fd =
   let char = Bytes.create 1 in
-  let buffer = Buffer.create max_buffer_len in
+  let buffer = Buffer.create initial_buffer_len in
   let rec aux () =
     let n = Unix.(handle_unix_error (fun () -> read fd char 0 1)) () in
     if n > 0 then Buffer.add_subbytes buffer char 0 n;
