@@ -22,7 +22,7 @@ open Freespec_exec.Coqstr
 open Freespec_exec.Coqbool
 open Freespec_exec.Extends
 open Freespec_exec.Coqunit
-open Utils
+open ExtUnix
 
 let path = "praecia.filesystem"
 
@@ -45,11 +45,13 @@ let is_file = function
   | [path] ->
      Sys.file_exists (string_of_coqstr path)
      |> bool_to_coqbool
+  | _ ->
+     assert false
 
 let read_file = function
   | [fd] ->
      read_all_from (fd_of_constr fd) |>
-     string_of_coqstr
+     string_to_coqstr
   | _ ->
      assert false
 
