@@ -50,7 +50,7 @@ let is_file = function
 
 let read_file = function
   | [fd] ->
-     read_all_from (fd_of_constr fd) |>
+     read_all_from ~line:false (fd_of_constr fd) |>
      string_to_coqstr
   | _ ->
      assert false
