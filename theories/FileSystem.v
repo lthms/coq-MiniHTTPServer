@@ -10,13 +10,13 @@ Axiom fd_eq_dec : forall (fd1 fd2 : file_descriptor), { fd1 = fd2 } + { ~ (fd1 =
 
 Inductive FILESYSTEM : interface :=
 | Open (path : string) : FILESYSTEM file_descriptor
-| IsFile (file : string) : FILESYSTEM bool
+| FileExists (file : string) : FILESYSTEM bool
 | Read (file : file_descriptor) : FILESYSTEM string
 | Close (file : file_descriptor) : FILESYSTEM unit.
 
 Register FILESYSTEM as praecia.filesystem.type.
 Register Open as praecia.filesystem.Open.
-Register IsFile as praecia.filesystem.IsFile.
+Register FileExists as praecia.filesystem.FileExists.
 Register Read as praecia.filesystem.Read.
 Register Close as praecia.filesystem.Close.
 
@@ -26,8 +26,8 @@ Definition open `{Provide ix FILESYSTEM} (path : string) : impure ix file_descri
 Definition close `{Provide ix FILESYSTEM} (fd : file_descriptor) : impure ix unit :=
   request (Close fd).
 
-Definition is_file `{Provide ix FILESYSTEM} (path : string) : impure ix bool :=
-  request (IsFile path).
+Definition file_exists `{Provide ix FILESYSTEM} (path : string) : impure ix bool :=
+  request (FileExists path).
 
 Definition read `{Provide ix FILESYSTEM} (fd : file_descriptor) : impure ix string :=
   request (Read fd).
@@ -87,7 +87,7 @@ Definition fd_set_update (ω : fd_set) (a : Type) (e : FILESYSTEM a) (x : a) : f
     del_fd ω fd
   | Read _, _ =>
     ω
-  | IsFile _, _ =>
+  | FileExists _, _ =>
     ω
   end.
 
@@ -99,7 +99,7 @@ Inductive fd_set_caller_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM
 | fd_set_close_caller (fd : file_descriptor) (is_member : member ω fd)
   : fd_set_caller_obligation ω unit (Close fd)
 | fd_set_is_file_caller (p : string)
-  : fd_set_caller_obligation ω bool (IsFile p).
+  : fd_set_caller_obligation ω bool (FileExists p).
 
 Hint Constructors fd_set_caller_obligation.
 
@@ -111,7 +111,7 @@ Inductive fd_set_callee_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM
 | fd_set_close_callee (fd : file_descriptor) (t : unit)
   : fd_set_callee_obligation ω unit (Close fd) t
 | fd_set_is_file_callee (p : string) (b : bool)
-  : fd_set_callee_obligation ω bool (IsFile p) b.
+  : fd_set_callee_obligation ω bool (FileExists p) b.
 
 Hint Constructors fd_set_callee_obligation.
 

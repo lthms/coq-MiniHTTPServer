@@ -41,7 +41,7 @@ let open_file = function
   | _ ->
      assert false
 
-let is_file = function
+let file_exists = function
   | [path] ->
      Sys.file_exists (string_of_coqstr path)
      |> bool_to_coqbool
@@ -65,7 +65,7 @@ let close_file = function
 let install_interface =
   register_interface path [
       ("Open",   open_file);
-      ("IsFile", is_file);
+      ("FileExists", file_exists);
       ("Read",   read_file);
       ("Close",  close_file)
     ]

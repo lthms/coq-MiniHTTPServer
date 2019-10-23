@@ -24,7 +24,7 @@ Definition request_handler `{Provide ix FILESYSTEM}
   match req with
   | Get uri =>
     do let path := uri_to_path (sandbox base uri) in
-       var isf <- is_file path in
+       var isf <- file_exists path in
        if (isf : bool)
        then make_response success_OK <$> read_content path
        else pure (make_response client_error_NotFound "Resource not found.")
@@ -67,24 +67,24 @@ Qed.
 
 #[local] Opaque read_content.
 
-Lemma fd_set_trustworthy_is_file `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
-  : trustworthy_impure fd_set_specs ω (is_file path).
+Lemma fd_set_trustworthy_file_exists `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
+  : trustworthy_impure fd_set_specs ω (file_exists path).
 
 Proof.
   now prove_impure.
 Qed.
 
-Hint Resolve fd_set_trustworthy_is_file.
+Hint Resolve fd_set_trustworthy_file_exists.
 
-Lemma fd_set_preserving_is_file `{Provide ix FILESYSTEM} (path : string)
-  : fd_set_preserving (is_file path).
+Lemma fd_set_preserving_file_exists `{Provide ix FILESYSTEM} (path : string)
+  : fd_set_preserving (file_exists path).
 
 Proof.
   intros ω ω' x run.
   now unroll_impure_run run.
 Qed.
 
-#[local] Opaque is_file.
+#[local] Opaque file_exists.
 
 Lemma fd_set_trustworthy_tcp_handler `{Provide ix FILESYSTEM}
     (base : list directory_id) (req : string) (ω : fd_set)
@@ -112,11 +112,11 @@ Proof.
   + now unroll_impure_run run0.
   + destruct p as [[res_id] req'].
     unroll_impure_run run0.
-    ++ apply fd_set_preserving_is_file in run.
+    ++ apply fd_set_preserving_file_exists in run.
        apply fd_set_preserving_read_content in run0.
 
        now transitivity (ω'' fd).
-    ++ now apply fd_set_preserving_is_file in run.
+    ++ now apply fd_set_preserving_file_exists in run.
 Qed.
 
 Hint Resolve fd_set_preserving_tcp_handler.
