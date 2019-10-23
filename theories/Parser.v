@@ -37,70 +37,6 @@ Class StrictParser {a} (p : parser a) : Prop :=
       end
   }.
 
-Lemma le_trans : forall n m p, n <= m -> m <= p -> n <= p.
-
-Proof.
-  induction 2.
-  + auto.
-  + now constructor.
-Defined.
-
-Lemma lt_trans : forall n m p, n < m -> m < p -> n < p.
-
-Proof.
-  induction 2.
-  + constructor.
-    apply H.
-  + constructor.
-    apply IHle.
-Defined.
-
-Lemma lt_le_incl (n m : nat)
-  : n < m -> n <= m.
-  revert n.
-  induction m; intros n.
-  + intros H.
-    inversion H.
-  + intros H.
-    inversion H; subst.
-    ++ induction m; auto.
-    ++ apply IHm in H1.
-       now constructor.
-Defined.
-
-Lemma lt_le_trans n m p : n < m -> m <= p -> n < p.
-
-Proof.
-  intros H1.
-  revert p.
-  induction H1; subst.
-  intros p H1.
-  + inversion H1.
-    ++ constructor.
-    ++ rewrite H0.
-       apply H1.
-  + intros p H2.
-    apply IHle.
-    apply le_trans with (m := S m).
-    ++ repeat constructor.
-    ++ exact H2.
-Defined.
-
-Lemma le_lt_trans n m p : n <= m -> m < p -> n < p.
-
-Proof.
-  intros H1.
-  revert p.
-  induction H1; subst.
-  intros p H1.
-  + exact H1.
-  + intros p H2.
-    apply IHle.
-    apply lt_trans with (m := S m).
-    constructor.
-    exact H2.
-Defined.
-
 Ltac auto_parser :=
   match goal with
   | H : forall x, StrictParser (?f x) |- context[?f ?x ?input] =>
@@ -136,18 +72,18 @@ Ltac auto_parser :=
     symmetry in H;
     try auto_parser
   | H : StrictParser ?p, equ : ?p ?input = inr (_, ?output) |- String.length ?output <= String.length ?input =>
-    assert (String.length output < String.length input) by auto_parser; now apply lt_le_incl
+    assert (String.length output < String.length input) by auto_parser; now apply PeanoNat.Nat.lt_le_incl
   | H : StrictParser ?p, equ : ?p ?input = inr (_, ?output) |- String.length ?output < String.length ?input =>
     let is_strict := fresh "is_strict" in
     destruct H as [is_strict];
     specialize is_strict with input;
     now rewrite equ in is_strict
   | Hp : StrictParser ?p, Hq : StrictParser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output <= String.length ?input  =>
-    apply le_trans with (m := String.length trans); try auto_parser
+    apply PeanoNat.Nat.le_trans with (m := String.length trans); try auto_parser
   | Hp : Parser ?p, Hq : StrictParser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output < String.length ?input  =>
-    apply (lt_le_trans _ (String.length trans) _); [ try auto_parser | try auto_parser ]
+    apply (PeanoNat.Nat.lt_le_trans _ (String.length trans) _); [ try auto_parser | try auto_parser ]
   | Hp : StrictParser ?p, Hq : Parser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output < String.length ?input  =>
-    apply (le_lt_trans _ (String.length trans) _); [ try auto_parser | try auto_parser ]
+    apply (PeanoNat.Nat.le_lt_trans _ (String.length trans) _); [ try auto_parser | try auto_parser ]
   | H : forall x, Parser (?f x) |- context[?f ?x ?input] =>
     case_eq (f x input); [ cbn; auto
                          | let y := fresh "y" in
@@ -176,7 +112,7 @@ Ltac auto_parser :=
     specialize is_parser with input;
     now rewrite equ in is_parser
   | Hp : Parser ?p, Hq : Parser ?q, equp : ?p ?input = inr (_, ?trans), equq : ?q ?trans = inr (_, ?output) |- String.length ?output <= String.length ?input  =>
-    apply le_trans with (m:=String.length trans); try auto_parser
+    apply PeanoNat.Nat.le_trans with (m:=String.length trans); try auto_parser
   end.
 
 #[program]
@@ -362,24 +298,6 @@ Qed.
 Definition str (target : string) : parser string :=
   with_context "trying to consume a string" (str_aux target) *> pure target.
 
-Theorem well_founded_lt_compat {a} (f : a -> nat) (R : a -> a -> Prop)
-    (H_compat : forall (x y: a), R x y -> f x < f y)
-  : well_founded R.
-Proof.
-  assert (H : forall n (x : a), f x < n -> Acc R x).
-  { induction n.
-    - intros. inversion H.
-    - intros x Hx. apply Acc_intro. intros y Hy.
-      apply IHn. apply lt_le_trans with (f x).
-      now apply H_compat in Hy.
-      inversion Hx; subst; auto.
-      apply le_trans with (m:=S (f x)).
-      repeat constructor.
-      exact H0.
-  }
-  intros x. apply (H (S (f x))). constructor.
-Defined.
-
 Definition many_aux {a} (p : parser a) (H : StrictParser p)
   : string -> list a -> list a * string.
   refine (@Fix _
@@ -458,7 +376,7 @@ Qed.
 Definition many_until_aux {a b} (p : parser a) (H : StrictParser p) (q : parser b)
   : string -> list a -> error_stack + (list a * string).
   refine (@Fix _ (fun i1 i2 => String.length i1 < String.length i2) _ _ _).
-  + eapply well_founded_lt_compat.
+  + eapply Wf_nat.well_founded_lt_compat.
     intros x y rec.
     eapply rec.
   + intros input func acc.
