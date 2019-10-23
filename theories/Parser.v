@@ -1,4 +1,4 @@
-From Coq Require Export String Ascii Program.Wf List.
+From Coq Require Export String Ascii Program.Wf List FunInd Recdef.
 From Prelude Require Export Control.
 From Prelude Require Import State Classes Sum Equality Option.
 
@@ -298,22 +298,16 @@ Qed.
 Definition str (target : string) : parser string :=
   with_context "trying to consume a string" (str_aux target) *> pure target.
 
-Definition many_aux {a} (p : parser a) (H : StrictParser p)
-  : string -> list a -> list a * string.
-  refine (@Fix _
-               (fun i1 i2 => String.length i1 < String.length i2)
-               _
-               _
-               _).
-  + eapply Wf_nat.well_founded_lt_compat.
-    intros x y rec.
-    eapply rec.
-  + intros input func acc.
-    case_eq (p input).
-    ++ intros e equ.
-       exact (rev acc, input).
-    ++ intros [x output] equ.
-       exact (func output ltac:(auto_parser) (x :: acc)).
+Function many_aux {a} (p : parser a) (H : StrictParser p) (input : string)
+    (acc : list a) {measure String.length input} : list a * string :=
+  match p input with
+  | inl _ => (rev acc, input)
+  | inr (x, output) => many_aux p H output (x :: acc)
+  end.
+
+Proof.
+  intros a p H input acc res eqr x output equ.
+  auto_parser.
 Defined.
 
 (** Note: we favor this implementation of [many] over
@@ -323,7 +317,7 @@ Defined.
 
 Definition many {a} (p : parser a) `{StrictParser a p} : parser (list a) :=
   fun (input : string) =>
-    match many_aux p _ input nil with
+    match many_aux a p _ input nil with
     | (x, output) => inr (x, output)
     end.
 
@@ -331,7 +325,14 @@ Definition many {a} (p : parser a) `{StrictParser a p} : parser (list a) :=
 Instance many_parser `(StrictParser a p) : Parser (many p).
 
 Next Obligation.
-Admitted.
+  unfold many.
+  functional induction (many_aux a p H input []).
+  + auto.
+  + destruct many_aux.
+    transitivity (String.length output).
+    ++ exact IHp0.
+    ++ auto_parser.
+Qed.
 
 Definition some {a} (p : parser a) `{StrictParser a p} : parser (list a) :=
   do var x <- p in
@@ -373,39 +374,57 @@ Proof.
   typeclasses eauto.
 Qed.
 
-Definition many_until_aux {a b} (p : parser a) (H : StrictParser p) (q : parser b)
-  : string -> list a -> error_stack + (list a * string).
-  refine (@Fix _ (fun i1 i2 => String.length i1 < String.length i2) _ _ _).
-  + eapply Wf_nat.well_founded_lt_compat.
-    intros x y rec.
-    eapply rec.
-  + intros input func acc.
-    case_eq (q input).
-    ++ intros _ _.
-       case_eq (p input).
-       +++ intros _ _.
-           exact (inl ["p failed before q could succeed"]).
-       +++ intros [x output] equ.
-           exact (func output ltac:(auto_parser) (x :: acc)).
-    ++ intros [_ output] _.
-       exact (inr (rev acc, output)).
+Function many_until_aux {a b} (p : parser a) (H : StrictParser p) (q : parser b)
+    (input : string) (acc : list a) {measure String.length input}
+  : error_stack + (list a * string) :=
+  match q input with
+  | inl _ => match p input with
+             | inl _ => inl ["p failed before q could succeed"]
+             | inr (x, output) => many_until_aux p H q output (x :: acc)
+             end
+  | inr (_, output) => inr (rev acc, output)
+  end.
+
+Proof.
+  intros a b p H q input acc e eque res x output equr equ.
+  auto_parser.
 Defined.
 
 Definition many_until {a b} (p : parser a) `{StrictParser a p} (q : parser b)
   : parser (list a) :=
-  fun input => many_until_aux p _ q input [].
+  fun input => many_until_aux a b p _ q input [].
 
 #[program]
 Instance many_until_parser `(StrictParser a p, Parser b q) : Parser (many_until p q).
 
 Next Obligation.
-Admitted.
+  unfold many_until.
+  functional induction (many_until_aux a b p H q input []).
+  + auto.
+  + destruct many_until_aux.
+    ++ auto.
+    ++ destruct p0 as [y output'].
+       transitivity (String.length output).
+       +++ auto.
+       +++ auto_parser.
+  + auto_parser.
+Qed.
 
 #[program]
 Instance many_until_strict `(StrictParser a p, StrictParser b q) : StrictParser (many_until p q).
 
 Next Obligation.
-Admitted.
+  unfold many_until.
+  functional induction (many_until_aux a b p H q input []).
+  + auto.
+  + destruct many_until_aux.
+    ++ auto.
+    ++ destruct p0 as [y output'].
+       transitivity (String.length output).
+       +++ auto.
+       +++ auto_parser.
+  + auto_parser.
+Qed.
 
 Definition some_until {a b} (p : parser a) `{StrictParser a p} (q : parser b)
   : parser (list a) :=
