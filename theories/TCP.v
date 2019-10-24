@@ -1,7 +1,6 @@
 From Coq Require Export String.
 From FreeSpec Require Export Core Exec.
 
-
 Generalizable All Variables.
 
 Axiom socket_descriptor : Type.

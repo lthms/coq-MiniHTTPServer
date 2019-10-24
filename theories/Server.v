@@ -43,52 +43,52 @@ Definition http_server `{Provide ix FILESYSTEM, Provide ix TCP}
   : impure ix unit :=
   tcp_server (tcp_handler [Dirname "tmp"]).
 
-Lemma fd_set_trustworthy_read_content `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
-  : trustworthy_impure fd_set_specs ω (read_content path).
+Lemma fd_set_respectful_read_content `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
+  : respectful_impure fd_set_contract ω (read_content path).
 
 Proof.
   now prove_impure.
 Qed.
 
-Hint Resolve fd_set_trustworthy_read_content.
+Hint Resolve fd_set_respectful_read_content.
 
 Lemma fd_set_preserving_read_content `{Provide ix FILESYSTEM} (path : string)
   : fd_set_preserving (read_content path).
 
 Proof.
   intros ω ω' x run.
-  unroll_impure_run run.
+  unroll_respectful_run run.
   intros fd'.
   unfold add_fd, del_fd.
   destruct fd_eq_dec; subst.
-  + now inversion prom; ssubst.
+  + now inversion o_callee; ssubst.
   + reflexivity.
 Qed.
 
 #[local] Opaque read_content.
 
-Lemma fd_set_trustworthy_file_exists `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
-  : trustworthy_impure fd_set_specs ω (file_exists path).
+Lemma fd_set_respectful_file_exists `{Provide ix FILESYSTEM} (ω : fd_set) (path : string)
+  : respectful_impure fd_set_contract ω (file_exists path).
 
 Proof.
   now prove_impure.
 Qed.
 
-Hint Resolve fd_set_trustworthy_file_exists.
+Hint Resolve fd_set_respectful_file_exists.
 
 Lemma fd_set_preserving_file_exists `{Provide ix FILESYSTEM} (path : string)
   : fd_set_preserving (file_exists path).
 
 Proof.
   intros ω ω' x run.
-  now unroll_impure_run run.
+  now unroll_respectful_run run.
 Qed.
 
 #[local] Opaque file_exists.
 
-Lemma fd_set_trustworthy_tcp_handler `{Provide ix FILESYSTEM}
+Lemma fd_set_respectful_tcp_handler `{Provide ix FILESYSTEM}
     (base : list directory_id) (req : string) (ω : fd_set)
-  : trustworthy_impure fd_set_specs ω (tcp_handler base req).
+  : respectful_impure fd_set_contract ω (tcp_handler base req).
 
 Proof.
   prove_impure.
@@ -99,7 +99,7 @@ Proof.
     now prove_impure.
 Qed.
 
-Hint Resolve fd_set_trustworthy_tcp_handler.
+Hint Resolve fd_set_respectful_tcp_handler.
 
 Lemma fd_set_preserving_tcp_handler `{Provide ix FILESYSTEM}
     (base : list directory_id) (req : string)
@@ -107,11 +107,11 @@ Lemma fd_set_preserving_tcp_handler `{Provide ix FILESYSTEM}
 
 Proof.
   intros ω ω' x run fd.
-  unroll_impure_run run.
+  unroll_respectful_run run.
   destruct (http_request req).
-  + now unroll_impure_run run0.
+  + now unroll_respectful_run run0.
   + destruct p as [[res_id] req'].
-    unroll_impure_run run0.
+    unroll_respectful_run run0.
     ++ apply fd_set_preserving_file_exists in run.
        apply fd_set_preserving_read_content in run0.
 
@@ -135,8 +135,8 @@ Lemma fd_set_preserving_repeatM {a} `{Provide ix FILESYSTEM}
 Proof.
   intros ω ω' fd run.
   induction n.
-  + now unroll_impure_run run.
-  + unroll_impure_run run.
+  + now unroll_respectful_run run.
+  + unroll_respectful_run run.
     apply IHn.
     assert (equ : ω = ω''). {
       apply functional_extensionality.
@@ -148,12 +148,12 @@ Qed.
 
 Hint Resolve fd_set_preserving_repeatM.
 
-Lemma repeatM_preserving_trustworthy {a} `{Provide ix FILESYSTEM}
+Lemma repeatM_preserving_respectful {a} `{Provide ix FILESYSTEM}
     (p : impure ix a) (ω : fd_set)
-    (fd_trust : trustworthy_impure fd_set_specs ω p)
+    (fd_trust : respectful_impure fd_set_contract ω p)
     (fd_preserving : fd_set_preserving p)
     (n : nat)
-  : trustworthy_impure fd_set_specs ω (repeatM n p).
+  : respectful_impure fd_set_contract ω (repeatM n p).
 
 Proof.
   induction n.
@@ -188,18 +188,18 @@ Lemma fd_set_preserving_tcp_server_repeat_routine
 
 Proof.
   intros ω ω' b run fd.
-  unroll_impure_run run.
+  unroll_respectful_run run.
   now apply preserve in run.
 Qed.
 
 Hint Resolve fd_set_preserving_tcp_server_repeat_routine.
 
-Lemma fd_set_trustworthy_http_server `{StrictProvide2 ix FILESYSTEM TCP} (ω : fd_set)
-  : trustworthy_impure fd_set_specs ω http_server.
+Lemma fd_set_respectful_http_server `{StrictProvide2 ix FILESYSTEM TCP} (ω : fd_set)
+  : respectful_impure fd_set_contract ω http_server.
 
 Proof.
   prove_impure.
-  apply repeatM_preserving_trustworthy.
+  apply repeatM_preserving_respectful.
   + prove_impure.
     destruct (http_request x2); now prove_impure.
   + intros ω' ω'' [] run fd.
@@ -211,7 +211,7 @@ Lemma fd_set_preserving_http_server `{StrictProvide2 ix FILESYSTEM TCP}
 
 Proof.
   intros ω ω' x run fd.
-  unroll_impure_run run.
+  unroll_respectful_run run.
   apply fd_set_preserving_repeatM in run; auto.
   now apply fd_set_preserving_tcp_server_repeat_routine.
 Qed.

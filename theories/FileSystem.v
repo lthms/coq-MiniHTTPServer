@@ -115,12 +115,12 @@ Inductive fd_set_callee_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM
 
 Hint Constructors fd_set_callee_obligation.
 
-Definition fd_set_specs : specs FILESYSTEM fd_set :=
+Definition fd_set_contract : contract FILESYSTEM fd_set :=
   {| witness_update := fd_set_update
-   ; requirements := fd_set_caller_obligation
-   ; promises := fd_set_callee_obligation
+   ; caller_obligation := fd_set_caller_obligation
+   ; callee_obligation := fd_set_callee_obligation
   |}.
 
 Definition fd_set_preserving {a} `{MayProvide ix FILESYSTEM} (p : impure ix a) :=
   forall (ω ω' : fd_set) (x : a),
-    trustworthy_run fd_set_specs p ω ω' x -> forall fd, ω fd = ω' fd.
+    respectful_run fd_set_contract p ω ω' x -> forall fd, ω fd = ω' fd.
