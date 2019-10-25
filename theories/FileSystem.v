@@ -1,36 +1,11 @@
 From Coq Require Import Int63 String.
-From FreeSpec Require Import Core.
+From FreeSpec Require Import Core Files.
 
 Generalizable All Variables.
 
 (** * Definition  *)
 
-Axiom file_descriptor : Type.
 Axiom fd_eq_dec : forall (fd1 fd2 : file_descriptor), { fd1 = fd2 } + { ~ (fd1 = fd2) }.
-
-Inductive FILESYSTEM : interface :=
-| Open (path : string) : FILESYSTEM file_descriptor
-| FileExists (file : string) : FILESYSTEM bool
-| Read (file : file_descriptor) : FILESYSTEM string
-| Close (file : file_descriptor) : FILESYSTEM unit.
-
-Register FILESYSTEM as praecia.filesystem.type.
-Register Open as praecia.filesystem.Open.
-Register FileExists as praecia.filesystem.FileExists.
-Register Read as praecia.filesystem.Read.
-Register Close as praecia.filesystem.Close.
-
-Definition open `{Provide ix FILESYSTEM} (path : string) : impure ix file_descriptor :=
-  request (Open path).
-
-Definition close `{Provide ix FILESYSTEM} (fd : file_descriptor) : impure ix unit :=
-  request (Close fd).
-
-Definition file_exists `{Provide ix FILESYSTEM} (path : string) : impure ix bool :=
-  request (FileExists path).
-
-Definition read `{Provide ix FILESYSTEM} (fd : file_descriptor) : impure ix string :=
-  request (Read fd).
 
 (** * Contracts *)
 
@@ -79,43 +54,47 @@ Qed.
 
 Hint Resolve member_add_fd.
 
-Definition fd_set_update (ω : fd_set) (a : Type) (e : FILESYSTEM a) (x : a) : fd_set :=
+Definition fd_set_update (ω : fd_set) (a : Type) (e : FILES a) (x : a) : fd_set :=
   match e, x with
-  | Open _, fd =>
+  | Open _, inr fd =>
     add_fd ω fd
   | Close fd, _ =>
     del_fd ω fd
-  | Read _, _ =>
+  | Read _ _, _ =>
     ω
-  | FileExists _, _ =>
+  | FSize _, _ =>
+    ω
+  | Open _, _ =>
     ω
   end.
 
-Inductive fd_set_caller_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM a -> Prop :=
+Inductive fd_set_caller_obligation (ω : fd_set) : forall (a : Type), FILES a -> Prop :=
 | fd_set_open_caller (p : string)
-  : fd_set_caller_obligation ω file_descriptor (Open p)
-| fd_set_read_caller (fd : file_descriptor) (is_member : member ω fd)
-  : fd_set_caller_obligation ω string (Read fd)
+  : fd_set_caller_obligation ω _ (Open p)
+| fd_set_read_caller (fd : file_descriptor) (n : int) (is_member : member ω fd)
+  : fd_set_caller_obligation ω _ (Read fd n)
 | fd_set_close_caller (fd : file_descriptor) (is_member : member ω fd)
   : fd_set_caller_obligation ω unit (Close fd)
-| fd_set_is_file_caller (p : string)
-  : fd_set_caller_obligation ω bool (FileExists p).
+| fd_set_is_file_caller (fd : file_descriptor)
+  : fd_set_caller_obligation ω _ (FSize fd).
 
 Hint Constructors fd_set_caller_obligation.
 
-Inductive fd_set_callee_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM a -> a -> Prop :=
-| fd_set_open_callee (p : string) (fd : file_descriptor) (is_absent : absent ω fd)
-  : fd_set_callee_obligation ω file_descriptor (Open p) fd
-| fd_set_read_callee (fd : file_descriptor) (s : string)
-  : fd_set_callee_obligation ω string (Read fd) s
+Inductive fd_set_callee_obligation (ω : fd_set) : forall (a : Type), FILES a -> a -> Prop :=
+| fd_set_open_callee_left (p : string) (fd : file_descriptor) (is_absent : absent ω fd)
+  : fd_set_callee_obligation ω _ (Open p) (inr fd)
+| fd_set_open_callee_right (p : string) (e : files_err)
+  : fd_set_callee_obligation ω _ (Open p) (inl e)
+| fd_set_read_callee (fd : file_descriptor) (n : int) (res : files_err + (int * string))
+  : fd_set_callee_obligation ω _ (Read fd n) res
 | fd_set_close_callee (fd : file_descriptor) (t : unit)
   : fd_set_callee_obligation ω unit (Close fd) t
-| fd_set_is_file_callee (p : string) (b : bool)
-  : fd_set_callee_obligation ω bool (FileExists p) b.
+| fd_set_fsize_callee (fd : file_descriptor) (res : files_err + int)
+  : fd_set_callee_obligation ω _ (FSize fd) res.
 
 Hint Constructors fd_set_callee_obligation.
 
-Definition fd_set_contract : contract FILESYSTEM fd_set :=
+Definition fd_set_contract : contract FILES fd_set :=
   {| witness_update := fd_set_update
    ; caller_obligation := fd_set_caller_obligation
    ; callee_obligation := fd_set_callee_obligation
