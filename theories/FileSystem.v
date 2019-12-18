@@ -1,7 +1,7 @@
 From Coq Require Import Int63.
 From Prelude Require Import All Bytes Text.
 From FreeSpec Require Import Core.
-From Praecia Require Import Init.
+From MiniHTTPServer Require Import Init.
 
 Generalizable All Variables.
 
@@ -17,11 +17,11 @@ Inductive FILESYSTEM : interface :=
 | Read (file : file_descriptor) : FILESYSTEM bytes
 | Close (file : file_descriptor) : FILESYSTEM unit.
 
-Register FILESYSTEM as praecia.filesystem.type.
-Register Open as praecia.filesystem.Open.
-Register FileExists as praecia.filesystem.FileExists.
-Register Read as praecia.filesystem.Read.
-Register Close as praecia.filesystem.Close.
+Register FILESYSTEM as minihttpserver.filesystem.type.
+Register Open as minihttpserver.filesystem.Open.
+Register FileExists as minihttpserver.filesystem.FileExists.
+Register Read as minihttpserver.filesystem.Read.
+Register Close as minihttpserver.filesystem.Close.
 
 Definition open `{Provide ix FILESYSTEM} (path : bytes) : impure ix file_descriptor :=
   request (Open path).
@@ -60,7 +60,7 @@ Proof.
   now rewrite m in a.
 Qed.
 
-Hint Resolve member_not_absent : praecia.
+Hint Resolve member_not_absent : minihttp.
 
 Lemma absent_not_member (ω : fd_set) (fd : file_descriptor)
   : absent ω fd -> ~ member ω fd.
@@ -71,7 +71,7 @@ Proof.
   now rewrite m in a.
 Qed.
 
-Hint Resolve absent_not_member : praecia.
+Hint Resolve absent_not_member : minihttp.
 
 Lemma member_add_fd (ω : fd_set) (fd : file_descriptor) : member (add_fd ω fd) fd.
 
@@ -80,7 +80,7 @@ Proof.
   destruct fd_eq_dec; auto.
 Qed.
 
-Hint Resolve member_add_fd : praecia.
+Hint Resolve member_add_fd : minihttp.
 
 Definition fd_set_update (ω : fd_set) (a : Type) (e : FILESYSTEM a) (x : a) : fd_set :=
   match e, x with
@@ -105,7 +105,7 @@ Inductive fd_set_caller_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM
 | fd_set_is_file_caller (p : bytes)
   : fd_set_caller_obligation ω bool (FileExists p).
 
-Hint Constructors fd_set_caller_obligation : praecia.
+Hint Constructors fd_set_caller_obligation : minihttp.
 
 
 Inductive fd_set_callee_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM a -> a -> Prop :=
@@ -118,7 +118,7 @@ Inductive fd_set_callee_obligation (ω : fd_set) : forall (a : Type), FILESYSTEM
 | fd_set_is_file_callee (p : bytes) (b : bool)
   : fd_set_callee_obligation ω bool (FileExists p) b.
 
-Hint Constructors fd_set_callee_obligation : praecia.
+Hint Constructors fd_set_callee_obligation : minihttp.
 
 Definition fd_set_contract : contract FILESYSTEM fd_set :=
   {| witness_update := fd_set_update

@@ -1,7 +1,7 @@
 From Coq Require Import FunctionalExtensionality.
-From FreeSpec Require Import Core Console.
-From Praecia Require Import FileSystem TCP URI HTTP.
 From Prelude Require Import All Tactics Bytes Text.
+From FreeSpec Require Import Core Console.
+From MiniHTTPServer Require Import FileSystem TCP URI HTTP.
 
 Generalizable All Variables.
 
@@ -60,10 +60,10 @@ Lemma fd_set_respectful_read_content `{StrictProvide2 ix FILESYSTEM CONSOLE} (ω
   : respectful_impure fd_set_contract ω (read_content path).
 
 Proof.
-  prove impure with praecia.
+  prove impure with minihttp.
 Qed.
 
-Hint Resolve fd_set_respectful_read_content : praecia.
+Hint Resolve fd_set_respectful_read_content : minihttp.
 
 Lemma fd_set_preserving_read_content `{StrictProvide2 ix FILESYSTEM CONSOLE} (path : bytes)
   : fd_set_preserving (read_content path).
@@ -84,10 +84,10 @@ Lemma fd_set_respectful_file_exists `{Provide ix FILESYSTEM} (ω : fd_set) (path
   : respectful_impure fd_set_contract ω (file_exists path).
 
 Proof.
-  prove impure with praecia.
+  prove impure with minihttp.
 Qed.
 
-Hint Resolve fd_set_respectful_file_exists : praecia.
+Hint Resolve fd_set_respectful_file_exists : minihttp.
 
 Lemma fd_set_preserving_file_exists `{Provide ix FILESYSTEM} (path : bytes)
   : fd_set_preserving (file_exists path).
@@ -109,10 +109,10 @@ Proof.
   + prove_impure.
   + prove_impure.
     destruct (fst p).
-    prove impure with praecia.
+    prove impure with minihttp.
 Qed.
 
-Hint Resolve fd_set_respectful_tcp_handler : praecia.
+Hint Resolve fd_set_respectful_tcp_handler : minihttp.
 
 Lemma fd_set_preserving_tcp_handler `{StrictProvide2 ix FILESYSTEM CONSOLE}
     (base : list directory_id) (req : bytes)
@@ -131,7 +131,7 @@ Proof.
     ++ now apply fd_set_preserving_file_exists in run0.
 Qed.
 
-Hint Resolve fd_set_preserving_tcp_handler : praecia.
+Hint Resolve fd_set_preserving_tcp_handler : minihttp.
 
 #[local] Opaque tcp_handler.
 #[local] Opaque response_to_string.
@@ -150,12 +150,12 @@ Proof.
     apply IHn.
     assert (equ : ω = ω''). {
       apply functional_extensionality.
-      eauto with praecia.
+      eauto with minihttp.
     }
     now rewrite equ.
 Qed.
 
-Hint Resolve fd_set_preserving_repeatM : praecia.
+Hint Resolve fd_set_preserving_repeatM : minihttp.
 
 Lemma repeatM_preserving_respectful {a} `{Provide ix FILESYSTEM}
     (p : impure ix a) (ω : fd_set)
@@ -201,7 +201,7 @@ Proof.
   now apply preserve in run.
 Qed.
 
-Hint Resolve fd_set_preserving_tcp_server_repeat_routine : praecia.
+Hint Resolve fd_set_preserving_tcp_server_repeat_routine : minihttp.
 
 Lemma fd_set_respectful_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
     (ω : fd_set)
@@ -211,10 +211,10 @@ Proof.
   prove_impure.
   apply repeatM_preserving_respectful.
   + prove_impure.
-    destruct (http_request x3); prove impure with praecia;
+    destruct (http_request x3); prove impure with minihttp;
        apply fd_set_respectful_tcp_handler. (* TODO: Why do we need this when it has been added as a hint? *)
   + intros ω' ω'' [] run fd.
-    apply fd_set_preserving_tcp_server_repeat_routine in run; auto with praecia.
+    apply fd_set_preserving_tcp_server_repeat_routine in run; auto with minihttp.
     apply fd_set_preserving_tcp_handler. (* TODO: Same here? *)
 Qed.
 
@@ -224,7 +224,7 @@ Lemma fd_set_preserving_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
 Proof.
   intros ω ω' x run fd.
   unroll_respectful_run run.
-  apply fd_set_preserving_repeatM in run; auto with praecia.
+  apply fd_set_preserving_repeatM in run; auto with minihttp.
   apply fd_set_preserving_tcp_server_repeat_routine.
   apply fd_set_preserving_tcp_handler.
 Qed.

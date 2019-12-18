@@ -7,5 +7,5 @@ Makefile*
 *.glob
 
 _build
-praecia.install
+minihttpserver.install
 .merlin

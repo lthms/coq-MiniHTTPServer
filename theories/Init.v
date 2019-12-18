@@ -1,1 +1,1 @@
-Create HintDb praecia.
+Create HintDb minihttp.

@@ -1,4 +1,4 @@
 From FreeSpec Require Import Core Exec.
-From Praecia Require Import TCP FileSystem.
+From MiniHTTPServer Require Import TCP FileSystem.
 
-Declare ML Module "praecia_plugin".
+Declare ML Module "minihttpserver_plugin".

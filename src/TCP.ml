@@ -23,7 +23,7 @@ open Freespec_exec.Extends
 open Freespec_exec.Coqunit
 open ExtUnix
 
-let path = "praecia.tcp"
+let path = "minihttpserver.tcp"
 
 let parse_address addr =
   match Str.(split (regexp ":") addr) with

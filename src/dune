@@ -1,5 +1,5 @@
 (library
-  (name praecia_plugin)
-  (public_name praecia.plugin)
+  (name minihttpserver_plugin)
+  (public_name minihttpserver.plugin)
   (flags :standard -rectypes -w -27)
   (libraries freespec-exec.plugin))

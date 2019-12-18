@@ -1,10 +1,10 @@
 -I src
--R theories Praecia
+-R theories MiniHTTPServer
 
 src/extUnix.ml
 src/TCP.ml
 src/fileSystem.ml
-src/praecia_plugin.mlpack
+src/minihttpserver_plugin.mlpack
 
 theories/Init.v
 theories/TCP.v

@@ -1,6 +1,6 @@
-From Praecia Require Import URI.
-From Comparse Require Import Monad Text Combinators.
 From Prelude Require Import All Bytes Byte Int.
+From Comparse Require Import Monad Text Combinators.
+From MiniHTTPServer Require Import URI.
 
 Inductive request :=
 | Get (resource : uri).
@@ -29,7 +29,7 @@ Definition http_request : parser bytes request :=
 
 Definition response_to_string (res : response) : bytes :=
   "HTTP/1.1 " ++ status_to_bytes (code res) ++ " Response\r\n" ++
-  "Content-Length: " ++ (bytes_of_int (length (body res))) ++ "\r\n" ++
+  "Content-Length: " ++ (bytes_of_int (Bytes.length (body res))) ++ "\r\n" ++
   "Connection: Closed\r\n" ++
   "\r\n" ++
   body res ++ "\r\n" ++

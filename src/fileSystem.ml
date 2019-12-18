@@ -24,7 +24,7 @@ open Freespec_exec.Extends
 open Freespec_exec.Coqunit
 open ExtUnix
 
-let path = "praecia.filesystem"
+let path = "minihttpserver.filesystem"
 
 let constr_of_fd fd =
   Constr.(of_kind (Int (Uint63.of_int (Obj.magic fd))))

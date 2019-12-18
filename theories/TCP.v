@@ -13,13 +13,13 @@ Inductive TCP : interface :=
 | WriteSocket (socket : socket_descriptor) (msg : bytes) : TCP unit
 | CloseTCPSocket (socket : socket_descriptor) : TCP unit.
 
-Register TCP as praecia.tcp.type.
-Register NewTCPSocket as praecia.tcp.NewTCPSocket.
-Register ListenIncomingConnection as praecia.tcp.ListenIncomingConnection.
-Register AcceptConnection as praecia.tcp.AcceptConnection.
-Register ReadSocket as praecia.tcp.ReadSocket.
-Register WriteSocket as praecia.tcp.WriteSocket.
-Register CloseTCPSocket as praecia.tcp.CloseTCPSocket.
+Register TCP as minihttpserver.tcp.type.
+Register NewTCPSocket as minihttpserver.tcp.NewTCPSocket.
+Register ListenIncomingConnection as minihttpserver.tcp.ListenIncomingConnection.
+Register AcceptConnection as minihttpserver.tcp.AcceptConnection.
+Register ReadSocket as minihttpserver.tcp.ReadSocket.
+Register WriteSocket as minihttpserver.tcp.WriteSocket.
+Register CloseTCPSocket as minihttpserver.tcp.CloseTCPSocket.
 
 Definition new_tcp_socket `{Provide ix TCP} (addr : bytes) : impure ix socket_descriptor :=
   request (NewTCPSocket addr).

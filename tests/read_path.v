@@ -1,16 +1,14 @@
-From Coq Require Import String.
-From Prelude Require Import Option.
+From Prelude Require Import Option Bytes.
 From FreeSpec Require Import Exec Console.
-From Praecia Require Import Parser HTTP URI.
+From MiniHTTPServer Require Import HTTP URI.
 
-#[local] Open Scope string_scope.
+Exec do
+  match http_request b#"GET /test/../.././ HTTP/1.1" with
+  | inr (Get uri, _) => echo ("Parsing succeeded: " ++ uri_to_path (make_uri (canonicalize (dirname uri))
+                                                                             (filename uri))
+                                                    ++ "\n")
 
-Exec
-  match parse http_request "GET /test/../.././ HTTP/1.1" with
-  | inr (Get uri) => echo ("Parsing succeeded: "
-                           ++ uri_to_path (make_uri (canonicalize (dirname uri))
-                                                    (filename uri)))
-
-  | inl (x :: _) => echo ("Error while parsing: " ++ x)
+  | inl (x :: _) => echo ("Error while parsing\n")
   | inl _ => echo "Error while parsing"
-  end.
+  end
+end.

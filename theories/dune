@@ -1,6 +1,6 @@
 (coq.theory
-  (name Praecia)
-  (public_name praecia.theory)
-  (libraries praecia.plugin))
+  (name MiniHTTPServer)
+  (public_name minihttpserver.theory)
+  (libraries minihttpserver.plugin))
 
 (include_subdirs qualified)
