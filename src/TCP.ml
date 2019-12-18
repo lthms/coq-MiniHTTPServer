@@ -40,7 +40,7 @@ let socket_of_constr c =
 
 let new_tcp_socket = function
   | [addr] ->
-     let addr = string_of_coqstr addr in
+     let addr = string_of_coqbytes addr in
      let hostname, port = parse_address addr in
      let fd = Unix.(socket PF_INET SOCK_STREAM 0) in
      Unix.setsockopt fd SO_REUSEADDR true;
@@ -63,7 +63,7 @@ let accept_connection = function
 let read_socket = function
   | [socket] ->
      read_all_from (socket_of_constr socket) |>
-     string_to_coqstr
+     string_to_coqbytes
   | _ ->
      assert false
 
@@ -76,7 +76,7 @@ let write_all_from data fd =
 
 let write_socket = function
   | [socket; str] ->
-     write_all_from (bytes_of_coqstr str) (socket_of_constr socket);
+     write_all_from (bytes_of_coqbytes str) (socket_of_constr socket);
      coqtt
   | _ ->
      assert false

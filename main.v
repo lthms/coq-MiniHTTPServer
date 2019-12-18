@@ -1,9 +1,5 @@
-From Coq Require Import List.
-From Praecia Require Import TCP FileSystem Parser HTTP URI Server.
 From FreeSpec Require Import Exec Console.
-
-Import ListNotations.
-
-Generalizable All Variables.
+From Praecia Require Import Server Exec HTTP.
+From Prelude Require Import Text.
 
 Exec http_server.

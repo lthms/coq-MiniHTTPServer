@@ -1,24 +1,18 @@
 From Coq Require Import List.
-From Praecia Require Import Parser.
-From Prelude Require Import Option Equality.
+From Comparse Require Import Monad Combinators Bytes.
+From Prelude Require Import All Option Bytes Byte.
 
 Import ListNotations.
-#[local] Open Scope string_scope.
-#[local] Open Scope prelude_scope.
 
-Fixpoint of_ascii_list (l : list ascii) : string :=
-  match l with
-  | x :: rst => String x (of_ascii_list rst)
-  | [] => EmptyString
-  end.
+#[local] Open Scope text_scope.
 
 Inductive directory_id : Type :=
-| Dirname (s : string)
+| Dirname (s : bytes)
 | Current
 | Parent.
 
 Inductive uri := make_uri { dirname : list directory_id
-                          ; filename : option string
+                          ; filename : option bytes
                           }.
 
 #[local]
@@ -39,7 +33,7 @@ Definition dirname_eq (d1 d2: list directory_id) : Prop :=
 Inductive canonical : list directory_id -> Prop :=
 | canonical_nil : canonical []
 | canonical_cons
-    (s : string) (rst : list directory_id) (canonical_rst : canonical rst)
+    (s : bytes) (rst : list directory_id) (canonical_rst : canonical rst)
   : canonical (Dirname s :: rst).
 
 Lemma canonical_canonical_tl (d : list directory_id)
@@ -47,7 +41,7 @@ Lemma canonical_canonical_tl (d : list directory_id)
 
 Proof.
   intros canon.
-  destruct d as [| x rst].
+  destruct d as [ | x rst].
   + auto.
   + now inversion canon.
 Qed.
@@ -142,7 +136,7 @@ Proof.
     now erewrite (IHd canonical_rst [Dirname s]).
 Qed.
 
-Remark canonical_canonicalize_cons_equ (s : string)
+Remark canonical_canonicalize_cons_equ (s : bytes)
     (d : list directory_id) (canon : canonical d)
   : canonicalize (Dirname s :: d) = Dirname s :: canonicalize d.
 
@@ -167,14 +161,14 @@ Lemma canonicalize_idempontent (d : list directory_id)
   : canonicalize (canonicalize d) = canonicalize d.
 
 Proof.
-  rewrite canonicalize_canonical_equ; [ reflexivity |].
+  rewrite canonicalize_canonical_equ; [ reflexivity | ].
   apply canonicalize_canonical.
 Qed.
 
 #[program, local]
-Fixpoint uri_to_path_aux (d : list directory_id) (canon : canonical d) : string :=
+Fixpoint uri_to_path_aux (d : list directory_id) (canon : canonical d) : bytes :=
   match d with
-  | [] => EmptyString
+  | [] => ""
   | Dirname x :: rst => x ++ "/" ++ uri_to_path_aux rst _
   | Parent :: _ => _
   | Current :: _ => _
@@ -193,8 +187,8 @@ Next Obligation.
 Defined.
 
 #[program]
-Definition uri_to_path (u : uri) : string :=
-  "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ fromMaybe ""%string (filename u).
+Definition uri_to_path (u : uri) : bytes :=
+  "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ fromMaybe b#"" (filename u).
 
 Next Obligation.
   apply canonicalize_canonical.
@@ -202,39 +196,34 @@ Qed.
 
 (** * Parsing URI *)
 
-Definition dir_id_sep : parser unit :=
-  eoi <|> ((char "/" <|> char " ") *> pure tt).
+Definition char (c : byte) : parser bytes byte := token c.
+Definition str (t : bytes) : parser bytes unit := tag (t := byte) t.
 
-Definition uri_char : parser ascii :=
-  ensure read_char (fun x => negb (eqb x " " || eqb x "/")).
+Definition dir_id_sep : parser bytes unit :=
+  eoi <|> skip (char "/") <|> skip (char " ").
 
-Definition dirid : parser directory_id :=
-  many (char "/") *>
-  (str ".." *> peek dir_id_sep *> pure Parent)
-  <|> (char "." *> peek dir_id_sep *> pure Current)
-  <|> (do var name <- some_until uri_char (peek dir_id_sep) in
-          peek (char "/");
-          pure (Dirname (of_ascii_list name))
-       end).
+Definition uri_char : parser bytes byte :=
+  ensure read_token (fun x => negb ((x ?= c#" ") || (x ?= c#"/"))).
 
-(* TODO: poor performance, can we provide some useful hints here? *)
-Definition path_dirname : parser (list directory_id) :=
-  many dirid.
-
-Definition path_filename : parser (option string) :=
-  do
-    var candidat <- of_ascii_list <$> many uri_char in
-    match candidat with
-    | "" => pure None
-    | "." | ".." => fail ". or .. are reserved directory names"
-    | x => pure (Some x)
-    end
+Definition dirid : parser bytes directory_id :=
+  do many (char "/");
+     (str ".." *> peek dir_id_sep *> pure Parent)
+       <|> (char "." *> peek dir_id_sep *> pure Current)
+       <|> do let* name <- some_until uri_char (peek dir_id_sep) in
+              peek (char "/");
+              pure (Dirname $ wrap_bytes name)
+           end
   end.
 
-Definition read_uri : parser uri :=
-  do var dirname <- path_dirname in
-     many (char "/");
-     var filename <- path_filename in
+Definition path_dirname : parser bytes (list directory_id) := many dirid.
 
-     pure (make_uri dirname filename)
+Definition path_filename : parser bytes (option bytes) :=
+  do let* candidat <- many uri_char in
+     match candidat with
+     | [] => pure None
+     | x => pure (Some $ wrap_bytes x)
+     end
   end.
+
+Definition read_uri : parser bytes uri :=
+  make_uri <$> path_dirname <*> (many (char "/") *> path_filename).

@@ -1,10 +1,6 @@
-From Praecia Require Import Parser URI.
-From Prelude Require Import Z.
-From Coq Require Import ZArith.
-
-Import ListNotations.
-#[local] Open Scope string_scope.
-#[local] Open Scope prelude_scope.
+From Praecia Require Import URI.
+From Comparse Require Import Monad Text Combinators.
+From Prelude Require Import All Bytes Byte Int.
 
 Inductive request :=
 | Get (resource : uri).
@@ -14,7 +10,7 @@ Inductive status :=
 | client_error_BadRequest
 | client_error_NotFound.
 
-Definition status_to_string (code : status) : string :=
+Definition status_to_bytes (code : status) : bytes :=
   match code with
   | success_OK => "200"
   | client_error_BadRequest => "400"
@@ -22,20 +18,19 @@ Definition status_to_string (code : status) : string :=
   end.
 
 Record response := make_response { code : status
-                                 ; body : string
+                                 ; body : bytes
                                  }.
 
-#[local] Open Scope string_scope.
+Definition whitespaces : parser bytes unit :=
+  skip (many (char c#" ")).
 
-Definition crlf := String "013" (String "010" EmptyString).
-
-Definition response_to_string (res : response) : string :=
-  "HTTP/1.1 " ++ status_to_string (code res) ++ " Response" ++ crlf ++
-  "Content-Length: " ++ (string_of_Z (Z.of_nat (String.length (body res)))) ++ crlf ++
-  "Connection: Closed" ++ crlf ++
-  crlf ++
-  body res ++ crlf ++
-  crlf.
-
-Definition http_request : parser request :=
+Definition http_request : parser bytes request :=
   Get <$> (str "GET" *> whitespaces *> read_uri <* whitespaces <* str "HTTP/1.1").
+
+Definition response_to_string (res : response) : bytes :=
+  "HTTP/1.1 " ++ status_to_bytes (code res) ++ " Response\r\n" ++
+  "Content-Length: " ++ (bytes_of_int (length (body res))) ++ "\r\n" ++
+  "Connection: Closed\r\n" ++
+  "\r\n" ++
+  body res ++ "\r\n" ++
+  "\r\n".

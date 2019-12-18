@@ -36,14 +36,13 @@ let fd_of_constr c =
 
 let open_file = function
   | [path] ->
-     Unix.openfile (string_of_coqstr path) [ O_RDONLY ] 0
-     |> constr_of_fd
+     Unix.openfile (string_of_coqbytes path) [ O_RDONLY ] 0 |> constr_of_fd
   | _ ->
      assert false
 
 let file_exists = function
   | [path] ->
-     Sys.file_exists (string_of_coqstr path)
+     Sys.file_exists (string_of_coqbytes path)
      |> bool_to_coqbool
   | _ ->
      assert false
@@ -51,7 +50,7 @@ let file_exists = function
 let read_file = function
   | [fd] ->
      read_all_from ~line:false (fd_of_constr fd) |>
-     string_to_coqstr
+     string_to_coqbytes
   | _ ->
      assert false
 
