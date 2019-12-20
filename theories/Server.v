@@ -1,7 +1,7 @@
 From Coq Require Import FunctionalExtensionality.
 From Prelude Require Import All Tactics Bytes Text.
 From FreeSpec Require Import Core Console.
-From MiniHTTPServer Require Import FileSystem TCP URI HTTP.
+From MiniHTTPServer Require Import FileSystem TCP URI HTTP Eval.
 
 Generalizable All Variables.
 
@@ -35,18 +35,19 @@ Definition request_handler `{Provide2 ix FILESYSTEM CONSOLE}
     end
   end.
 
-Definition tcp_handler `{Provide2 ix FILESYSTEM CONSOLE}
+Definition tcp_handler `{Provide3 ix FILESYSTEM CONSOLE EVAL}
     (base : list directory_id) (req : bytes)
   : impure ix bytes :=
   do echo "new request received\n";
      echo ("  request size is " ++ Int.bytes_of_int (Bytes.length req) ++ "\n");
-     response_to_string <$> match http_request req with
+     let* p <- eval (http_request req) in
+     response_to_string <$> match p with
                             | inl _ => pure (make_response client_error_BadRequest "Bad request")
                             | inr req => request_handler base (fst req)
                             end
   end.
 
-Definition http_server `{Provide3 ix FILESYSTEM TCP CONSOLE}
+Definition http_server `{Provide4 ix FILESYSTEM TCP CONSOLE EVAL}
   : impure ix unit :=
   do echo "hello, world!\n";
      tcp_server (tcp_handler [Dirname "tmp"])
@@ -64,6 +65,11 @@ Proof.
 Qed.
 
 Hint Resolve fd_set_respectful_read_content : minihttp.
+(* NOTE: This is required because of the typeclass-related arguments of the
+   lemma, since [Hint Resolve] adds [simple (e)apply @term; trivial], which may
+   create a goal of type [StrictProvideN] which can be easily solved by
+   [typeclasses eauto] but [trivial] is used. *)
+Hint Extern 4 (respectful_impure fd_set_contract _ (read_content _)) => apply fd_set_respectful_read_content : minihttp.
 
 Lemma fd_set_preserving_read_content `{StrictProvide2 ix FILESYSTEM CONSOLE} (path : bytes)
   : fd_set_preserving (read_content path).
@@ -99,13 +105,13 @@ Qed.
 
 #[local] Opaque file_exists.
 
-Lemma fd_set_respectful_tcp_handler `{StrictProvide2 ix FILESYSTEM CONSOLE}
+Lemma fd_set_respectful_tcp_handler `{StrictProvide3 ix FILESYSTEM CONSOLE EVAL}
     (base : list directory_id) (req : bytes) (ω : fd_set)
   : respectful_impure fd_set_contract ω (tcp_handler base req).
 
 Proof.
   prove_impure.
-  destruct (http_request req).
+  destruct x1.
   + prove_impure.
   + prove_impure.
     destruct (fst p).
@@ -114,14 +120,14 @@ Qed.
 
 Hint Resolve fd_set_respectful_tcp_handler : minihttp.
 
-Lemma fd_set_preserving_tcp_handler `{StrictProvide2 ix FILESYSTEM CONSOLE}
+Lemma fd_set_preserving_tcp_handler `{StrictProvide3 ix FILESYSTEM CONSOLE EVAL}
     (base : list directory_id) (req : bytes)
   : fd_set_preserving (tcp_handler base req).
 
 Proof.
   intros ω ω' x run fd.
   unroll_respectful_run run.
-  destruct (http_request req).
+  destruct x2.
   + now unroll_respectful_run run.
   + destruct p as [[res_id] req'].
     unroll_respectful_run run.
@@ -203,7 +209,7 @@ Qed.
 
 Hint Resolve fd_set_preserving_tcp_server_repeat_routine : minihttp.
 
-Lemma fd_set_respectful_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+Lemma fd_set_respectful_http_server `{StrictProvide4 ix FILESYSTEM TCP CONSOLE EVAL}
     (ω : fd_set)
   : respectful_impure fd_set_contract ω http_server.
 
@@ -218,7 +224,7 @@ Proof.
     apply fd_set_preserving_tcp_handler. (* TODO: Same here? *)
 Qed.
 
-Lemma fd_set_preserving_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+Lemma fd_set_preserving_http_server `{StrictProvide4 ix FILESYSTEM TCP CONSOLE EVAL}
   : fd_set_preserving http_server.
 
 Proof.
