@@ -207,18 +207,18 @@ Definition uri_char : parser bytes byte :=
 
 Definition dirid : parser bytes directory_id :=
   do many (char "/");
-     (str ".." *> peek dir_id_sep *> pure Parent)
-       <|> (char "." *> peek dir_id_sep *> pure Current)
-       <|> do let* name <- some_until uri_char (peek dir_id_sep) in
-              peek (char "/");
-              pure (Dirname $ wrap_bytes name)
-           end
+     do let* name := some_until uri_char (peek dir_id_sep) in
+        peek (char "/");
+        pure (Dirname $ wrap_bytes name)
+     end
+     <|> (str ".." *> peek dir_id_sep *> pure Parent)
+     <|> (char "." *> peek dir_id_sep *> pure Current)
   end.
 
 Definition path_dirname : parser bytes (list directory_id) := many dirid.
 
 Definition path_filename : parser bytes (option bytes) :=
-  do let* candidat <- many uri_char in
+  do let* candidat := many uri_char in
      match candidat with
      | [] => pure None
      | x => pure (Some $ wrap_bytes x)

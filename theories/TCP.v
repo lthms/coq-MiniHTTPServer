@@ -47,14 +47,14 @@ Fixpoint repeatM `{Monad m} {a} (n : nat) (p : m a) : m unit :=
 
 Definition tcp_server `{Provide ix TCP} (handler : bytes -> impure ix bytes)
   : impure ix unit :=
-  do let* server <- new_tcp_socket (bytes_of_text "127.0.0.1:8088") in
+  do let* server := new_tcp_socket (bytes_of_text "127.0.0.1:8088") in
      listen_incoming_connection server;
 
      repeatM 100 do
-       let* client <- accept_connection server in
+       let* client := accept_connection server in
 
-       let* req <- read_socket client in
-       let* res <- handler req in
+       let* req := read_socket client in
+       let* res := handler req in
        write_socket client res;
 
        close_socket client

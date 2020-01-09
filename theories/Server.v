@@ -12,8 +12,8 @@ Definition read_content `{Provide2 ix FILESYSTEM CONSOLE}
     (path : bytes)
   : impure ix bytes :=
   do echo ("  reading <" ++ path ++ ">... ");
-     let* fd <- open path in
-     let* c <- read fd in
+     let* fd := open path in
+     let* c := read fd in
      close fd;
      echo ("done.\n");
      pure c
@@ -26,7 +26,7 @@ Definition request_handler `{Provide2 ix FILESYSTEM CONSOLE}
   match req with
   | Get uri =>
     do let path := uri_to_path (sandbox base uri) in
-       let* isf <- file_exists path in
+       let* isf := file_exists path in
        if (isf : bool)
        then make_response success_OK <$> read_content path
        else do echo ("  resource <" ++ path ++"> not found\n");
@@ -40,7 +40,7 @@ Definition tcp_handler `{Provide3 ix FILESYSTEM CONSOLE EVAL}
   : impure ix bytes :=
   do echo "new request received\n";
      echo ("  request size is " ++ Int.bytes_of_int (Bytes.length req) ++ "\n");
-     let* p <- eval (http_request req) in
+     let* p := eval (http_request req) in
      response_to_string <$> match p with
                             | inl _ => pure (make_response client_error_BadRequest "Bad request")
                             | inr req => request_handler base (fst req)
@@ -192,10 +192,10 @@ Lemma fd_set_preserving_tcp_server_repeat_routine
     (server : socket_descriptor)
     (handler : bytes -> impure ix bytes)
     (preserve : forall (req : bytes), fd_set_preserving (handler req))
-  : fd_set_preserving (do let* client <- accept_connection server in
+  : fd_set_preserving (do let* client := accept_connection server in
 
-                          let* req <- read_socket client in
-                          let* res <- handler req in
+                          let* req := read_socket client in
+                          let* res := handler req in
                           write_socket client res;
 
                           close_socket client
