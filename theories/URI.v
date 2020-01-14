@@ -10,7 +10,7 @@ Inductive directory_id : Type :=
 | Parent.
 
 Inductive uri := make_uri { dirname : list directory_id
-                          ; filename : option bytes
+                          ; filename : bytes
                           }.
 
 #[local]
@@ -186,7 +186,7 @@ Defined.
 
 #[program]
 Definition uri_to_path (u : uri) : bytes :=
-  "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ fromMaybe b#"" (filename u).
+  "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ filename u.
 
 Next Obligation.
   apply canonicalize_canonical.
@@ -215,11 +215,11 @@ Definition dirid : parser bytes directory_id :=
 
 Definition path_dirname : parser bytes (list directory_id) := many dirid.
 
-Definition path_filename : parser bytes (option bytes) :=
+Definition path_filename : parser bytes bytes :=
   do let* candidat := many uri_char in
      match candidat with
-     | [] => pure None
-     | x => pure (Some $ wrap_bytes x)
+     | [] => pure b#"index.html"
+     | x => pure (wrap_bytes x)
      end
   end.
 
