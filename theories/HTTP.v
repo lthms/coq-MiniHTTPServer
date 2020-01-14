@@ -1,5 +1,5 @@
 From Prelude Require Import All Bytes Byte Int.
-From Comparse Require Import Monad Text Combinators.
+From Comparse Require Import Monad Combinators.
 From MiniHTTPServer Require Import URI.
 
 Inductive request :=

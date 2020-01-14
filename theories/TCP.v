@@ -1,4 +1,4 @@
-From Prelude Require Import All Bytes Text.
+From Prelude Require Import All Bytes.
 From FreeSpec Require Export Core Exec.
 
 Generalizable All Variables.
@@ -47,7 +47,7 @@ Fixpoint repeatM `{Monad m} {a} (n : nat) (p : m a) : m unit :=
 
 Definition tcp_server `{Provide ix TCP} (handler : bytes -> impure ix bytes)
   : impure ix unit :=
-  do let* server := new_tcp_socket (bytes_of_text "127.0.0.1:8088") in
+  do let* server := new_tcp_socket "127.0.0.1:8088" in
      listen_incoming_connection server;
 
      repeatM 100 do

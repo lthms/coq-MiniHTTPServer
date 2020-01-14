@@ -4,8 +4,6 @@ From Prelude Require Import All Option Bytes Byte.
 
 Import ListNotations.
 
-#[local] Open Scope text_scope.
-
 Inductive directory_id : Type :=
 | Dirname (s : bytes)
 | Current

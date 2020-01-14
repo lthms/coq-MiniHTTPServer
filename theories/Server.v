@@ -1,5 +1,5 @@
 From Coq Require Import FunctionalExtensionality.
-From Prelude Require Import All Tactics Bytes Text.
+From Prelude Require Import All Tactics Bytes.
 From FreeSpec Require Import Core Console.
 From MiniHTTPServer Require Import FileSystem TCP URI HTTP Eval.
 

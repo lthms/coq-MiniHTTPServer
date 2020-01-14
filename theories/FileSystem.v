@@ -1,5 +1,5 @@
 From Coq Require Import Int63.
-From Prelude Require Import All Bytes Text.
+From Prelude Require Import All Bytes.
 From FreeSpec Require Import Core.
 From MiniHTTPServer Require Import Init.
 
