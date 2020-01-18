@@ -1,0 +1,1469 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<link href="coqdoc.css" rel="stylesheet" type="text/css" />
+<title>server</title>
+</head>
+
+<body>
+
+<div id="page">
+
+<div id="header">
+</div>
+
+<div id="main">
+
+<h1 class="libtitle">Library server</h1>
+
+<div class="code">
+</div>
+
+<div class="doc">
+FreeSpec is a general-purpose framework for implementing (with a Free monad)
+    and certifying (with contracts) impure computations. In this tutorial, we
+    will use FreeSpec to implement and certify a webserver we call
+    <tt>MiniHTTPServer</tt>. Our goal is to prove our HTTP server correctly uses the
+    filesystem, that is it reads from and closes valid file descriptors, and
+    closes all its file descriptors.
+
+<div class="paragraph"> </div>
+
+    The <span class="inlinecode"><span class="id" title="var">FreeSpec.Core</span></span> module reexports the key component provided by
+    FreeSpec. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">From</span> <span class="id" title="var">FreeSpec</span> <span class="id" title="keyword">Require</span> <span class="id" title="keyword">Import</span> <span class="id" title="library">Core</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab1"></a><h1 class="section">I. Implementation</h1>
+
+<div class="paragraph"> </div>
+
+ FreeSpec provides the <span class="inlinecode"><span class="id" title="var">impure</span></span> monad to implement impure computations. This
+    monad is equipped with the necessary notations to write idiomatic momadic
+    code, thanks to the same notations as the ones introduced in recent versions
+    of OCaml.
+
+<div class="paragraph"> </div>
+
+    The <span class="inlinecode"><span class="id" title="var">impure</span></span> type takes two parameters respectively of type <span class="inlinecode"><span class="id" title="var">interface</span></span> and
+    <span class="inlinecode"><span class="id" title="keyword">Type</span></span>:
+
+<div class="paragraph"> </div>
+
+<ul class="doclist">
+<li> An interface is a parameterized inductive type, whose constructors
+        identify impure primitives. For an interface <span class="inlinecode"><span class="id" title="var">i</span></span>, a term of type <span class="inlinecode"><span class="id" title="var">i</span></span> <span class="inlinecode"><span class="id" title="var">a</span></span>
+        identifies a primitive which produces a term of type <span class="inlinecode"><span class="id" title="var">a</span></span>. An impure
+        computation of type <span class="inlinecode"><span class="id" title="var">impure</span></span> <span class="inlinecode"><span class="id" title="var">i</span></span> <span class="inlinecode"><span class="id" title="var">a</span></span> can leverage primitives of the
+        interface <span class="inlinecode"><span class="id" title="var">i</span></span>.
+
+</li>
+<li> The second parameter of <span class="inlinecode"><span class="id" title="var">impure</span></span> is the type of result returned by the
+        impure computation. Therefore, an impure computation of type <span class="inlinecode"><span class="id" title="var">impure</span></span> <span class="inlinecode"><span class="id" title="var">i</span></span> <span class="inlinecode"><span class="id" title="var">a</span></span>
+        is expected to produce a result of type <span class="inlinecode"><span class="id" title="var">a</span></span>. 
+</li>
+</ul>
+
+<div class="paragraph"> </div>
+
+<a name="lab2"></a><h2 class="section">I.1 Defining Interfaces</h2>
+
+<div class="paragraph"> </div>
+
+ An <span class="inlinecode"><span class="id" title="var">interface</span></span> is a parameterized inductive type whose constructors identify
+    impure primitives.
+
+<div class="paragraph"> </div>
+
+    For our server, we anticipate the use of three “kinds” of primitives to:
+
+<div class="paragraph"> </div>
+
+<ul class="doclist">
+<li> Create and manipulate TCP sockets
+
+</li>
+<li> Interact with the filesystem
+
+</li>
+<li> Interact with the console
+
+</li>
+</ul>
+
+<div class="paragraph"> </div>
+
+    Since an impure computation can use <i>several</i> interfaces, FreeSpec favors
+    defining indendent primitives as part of different interfaces. In our case,
+    this means we will have three different interfaces. 
+<div class="paragraph"> </div>
+
+<a name="lab3"></a><h3 class="section">The TCP Interface</h3>
+
+<div class="paragraph"> </div>
+
+ We first consider the interface which will allows us to interact with TCP
+    sockets. The related primitives will rely on socket <i>descriptors</i>, whose
+    concrete implementaiton is opaque in most languages. We will introduce it as
+    an axiom. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Axiom</span> <a name="socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a> : <span class="id" title="keyword">Type</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Using <span class="inlinecode"><span class="id" title="var">socket_descriptor</span></span>, we can define the <span class="inlinecode"><span class="id" title="var">TCP</span></span> type. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Inductive</span> <a name="TCP"><span class="id" title="inductive">TCP</span></a> : <span class="id" title="definition">interface</span> :=<br/>
+<br/>
+</div>
+
+<div class="doc">
+<ul class="doclist">
+<li> <span class="inlinecode"><span class="id" title="var">NewTCPSocket</span></span> is a primitive to create a socket. It takes as an argument
+        the address of the socket (of the form <tt>[url]:[port]</tt>) of type <span class="inlinecode"><span class="id" title="var">bytes</span></span>
+        (a type provided by the <tt>coq-prelude</tt> project with a convenient string
+        notation). It returns a <span class="inlinecode"><span class="id" title="var">socket_descriptor</span></span> to interact with the newly
+        created socket. 
+</li>
+</ul>
+
+</div>
+<div class="code">
+<br/>
+| <a name="NewTCPSocket"><span class="id" title="constructor">NewTCPSocket</span></a> (<span class="id" title="var">addr</span> : <span class="id" title="record">bytes</span>) : <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a><br/>
+<br/>
+</div>
+
+<div class="doc">
+<ul class="doclist">
+<li> <span class="inlinecode"><span class="id" title="var">ListenIncomingConnection</span></span> changes the mode of a given socket identified
+        by a <span class="inlinecode"><span class="id" title="var">socket_descriptor</span></span>, effectively creating a server. It returns
+        nothing, thus its type is <span class="inlinecode"><span class="id" title="var">TCP</span></span> <span class="inlinecode"><span class="id" title="var">unit</span></span>. 
+</li>
+</ul>
+
+</div>
+<div class="code">
+<br/>
+| <a name="ListenIncomingConnection"><span class="id" title="constructor">ListenIncomingConnection</span></a> (<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>) : <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a><br/>
+<br/>
+</div>
+
+<div class="doc">
+<ul class="doclist">
+<li> <span class="inlinecode"><span class="id" title="var">AcceptConnection</span></span> takes a <span class="inlinecode"><span class="id" title="var">socket_descriptor</span></span> (in “listen incomming
+        connection” mode). The impure computation then waits until a client
+        initiate a connection, and when it happens, <span class="inlinecode"><span class="id" title="var">AcceptConnection</span></span> returns a
+        new socket to interact with this client. Thus, the type of
+        <span class="inlinecode"><span class="id" title="var">AcceptConnection</span></span> is <span class="inlinecode"><span class="id" title="var">TCP</span></span> <span class="inlinecode"><span class="id" title="var">socket_descriptor</span></span>. 
+</li>
+</ul>
+
+</div>
+<div class="code">
+<br/>
+| <a name="AcceptConnection"><span class="id" title="constructor">AcceptConnection</span></a> (<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>) : <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a><br/>
+<br/>
+</div>
+
+<div class="doc">
+<ul class="doclist">
+<li> <span class="inlinecode"><span class="id" title="var">ReadSocket</span></span> and <span class="inlinecode"><span class="id" title="var">WriteSocket</span></span> allows to receive data from and send data
+        to the socket, that is interacting with the client. They also use the
+        <span class="inlinecode"><span class="id" title="var">bytes</span></span> type 
+</li>
+</ul>
+
+</div>
+<div class="code">
+<br/>
+| <a name="ReadSocket"><span class="id" title="constructor">ReadSocket</span></a> (<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>) : <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <span class="id" title="record">bytes</span><br/>
+| <a name="WriteSocket"><span class="id" title="constructor">WriteSocket</span></a> (<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>) (<span class="id" title="var">msg</span> : <span class="id" title="record">bytes</span>) : <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a><br/>
+<br/>
+</div>
+
+<div class="doc">
+<ul class="doclist">
+<li> Finally, <span class="inlinecode"><span class="id" title="var">CloseTCPSocket</span></span> interrupts an existing connection by closing the
+        link between the server and the client.  
+</li>
+</ul>
+
+</div>
+<div class="code">
+<br/>
+| <a name="CloseTCPSocket"><span class="id" title="constructor">CloseTCPSocket</span></a> (<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>) : <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Terms of type <span class="inlinecode"><span class="id" title="var">TCP</span></span> are empty shell. They <i>identify</i> a primitive, and
+    nothing more.  FreeSpec provides a helper named <span class="inlinecode"><span class="id" title="var">request</span></span> to turn a
+    primitive identifier (that is, a term of type <span class="inlinecode"><span class="id" title="var">i</span></span> <span class="inlinecode"><span class="id" title="var">a</span></span>) into an impure
+    computation consisting in using the primitive and returning its result. The
+    type of <span class="inlinecode"><span class="id" title="var">request</span></span> is really informing:
+
+<div class="paragraph"> </div>
+
+<pre>
+request : forall `{Provide ix i} {a}, i a -&gt; impure ix a
+</pre>
+
+<div class="paragraph"> </div>
+
+    The interface type of the impure computation created by <span class="inlinecode"><span class="id" title="var">request</span></span> (<span class="inlinecode"><span class="id" title="var">ix</span></span>) is
+    universally quantified, with only the restriction that <span class="inlinecode"><span class="id" title="var">ix</span></span> provides at
+    least the primitives of <span class="inlinecode"><span class="id" title="var">i</span></span>. The use of this bounded universal
+    quantification is to seemlessly compose impure computations using different
+    interfaces.
+
+<div class="paragraph"> </div>
+
+    To reduce the verbosity of the impure computation verbosity, we use the
+    <span class="inlinecode"><span class="id" title="keyword">Generalizable</span></span> <span class="inlinecode"><span class="id" title="keyword">All</span></span> <span class="inlinecode"><span class="id" title="keyword">Variables</span></span> feature of Coq. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Generalizable</span> <span class="id" title="keyword">All</span> <span class="id" title="keyword">Variables</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Then, for each constructor of <span class="inlinecode"><span class="id" title="var">TCP</span></span>, we create an impure computation with
+    the exact same arguments. This is cumbersome, but in future version of
+    FreeSpec we hope we will be able to provide helpers to generate them
+    automatically, thanks to the <span class="inlinecode"><span class="id" title="var">MetaCoq</span></span> project. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="new_tcp_socket"><span class="id" title="definition">new_tcp_socket</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>} (<span class="id" title="var">addr</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#NewTCPSocket"><span class="id" title="constructor">NewTCPSocket</span></a> <a class="idref" href="server.html#addr"><span class="id" title="variable">addr</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="listen_incoming_connection"><span class="id" title="definition">listen_incoming_connection</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#ListenIncomingConnection"><span class="id" title="constructor">ListenIncomingConnection</span></a> <a class="idref" href="server.html#socket"><span class="id" title="variable">socket</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="accept_connection"><span class="id" title="definition">accept_connection</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#AcceptConnection"><span class="id" title="constructor">AcceptConnection</span></a> <a class="idref" href="server.html#socket"><span class="id" title="variable">socket</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="read_socket"><span class="id" title="definition">read_socket</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <span class="id" title="record">bytes</span> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#ReadSocket"><span class="id" title="constructor">ReadSocket</span></a> <a class="idref" href="server.html#socket"><span class="id" title="variable">socket</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="write_socket"><span class="id" title="definition">write_socket</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>) (<span class="id" title="var">msg</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#WriteSocket"><span class="id" title="constructor">WriteSocket</span></a> <a class="idref" href="server.html#socket"><span class="id" title="variable">socket</span></a> <a class="idref" href="server.html#msg"><span class="id" title="variable">msg</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="close_socket"><span class="id" title="definition">close_socket</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>} (<span class="id" title="var">socket</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#CloseTCPSocket"><span class="id" title="constructor">CloseTCPSocket</span></a> <a class="idref" href="server.html#socket"><span class="id" title="variable">socket</span></a>).<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab4"></a><h3 class="section">The FILESYSTEM Interface</h3>
+
+<div class="paragraph"> </div>
+
+ We provide a similar description of the <span class="inlinecode"><span class="id" title="var">FILESYSEM</span></span> interface, and define
+    the basic impure computations that we will then leverage to use it (thanks
+    to the <span class="inlinecode"><span class="id" title="var">request</span></span> helper of FreeSpec). 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Axiom</span> <a name="file_descriptor"><span class="id" title="axiom">file_descriptor</span></a> : <span class="id" title="keyword">Type</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Inductive</span> <a name="FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> : <span class="id" title="definition">interface</span> :=<br/>
+| <a name="Open"><span class="id" title="constructor">Open</span></a> (<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>) : <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a><br/>
+| <a name="FileExists"><span class="id" title="constructor">FileExists</span></a> (<span class="id" title="var">file</span> : <span class="id" title="record">bytes</span>) : <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#bool"><span class="id" title="inductive">bool</span></a><br/>
+| <a name="Read"><span class="id" title="constructor">Read</span></a> (<span class="id" title="var">file</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="record">bytes</span><br/>
+| <a name="Close"><span class="id" title="constructor">Close</span></a> (<span class="id" title="var">file</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="open"><span class="id" title="definition">open</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>} (<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>) : <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#Open"><span class="id" title="constructor">Open</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="close"><span class="id" title="definition">close</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>} (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#Close"><span class="id" title="constructor">Close</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="file_exists"><span class="id" title="definition">file_exists</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>} (<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>) : <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#bool"><span class="id" title="inductive">bool</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#FileExists"><span class="id" title="constructor">FileExists</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="read"><span class="id" title="definition">read</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>} (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <span class="id" title="record">bytes</span> :=<br/>
+&nbsp;&nbsp;<span class="id" title="definition">request</span> (<a class="idref" href="server.html#Read"><span class="id" title="constructor">Read</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>).<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab5"></a><h3 class="section">The CONSOLE Interface</h3>
+
+<div class="paragraph"> </div>
+
+ Finally, FreeSpec already provides a few generic interfaces for FreeSpec
+    users, including a <span class="inlinecode"><span class="id" title="var">CONSOLE</span></span> interface:
+
+<div class="paragraph"> </div>
+
+<pre>
+Inductive CONSOLE : interface :=
+| Scan : CONSOLE bytes
+| Echo : bytes -&gt; CONSOLE unit.
+</pre>
+
+<div class="paragraph"> </div>
+
+    It is defined in the <span class="inlinecode"><span class="id" title="var">FreeSpec.Stdlib.Console</span></span> module. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">From</span> <span class="id" title="var">FreeSpec.Stdlib</span> <span class="id" title="keyword">Require</span> <span class="id" title="keyword">Import</span> <span class="id" title="library">Console</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab6"></a><h2 class="section">I.2. Implementing a HTTP Server</h2>
+
+<div class="paragraph"> </div>
+
+ With the three interfaces we have defined in the previous section, we can
+    now implement <tt>MiniHTTPServer</tt>, that is a minimal HTTP server. Our
+    objective is to write a code as idiomatic as possible.
+
+<div class="paragraph"> </div>
+
+    To that end, we rely on the <tt>coq-prelude</tt> package, and therefore import
+    it. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">From</span> <span class="id" title="var">Prelude</span> <span class="id" title="keyword">Require</span> <span class="id" title="keyword">Import</span> <span class="id" title="library">All</span> <span class="id" title="library">Bytes</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab7"></a><h3 class="section">A Word on Non-Termination</h3>
+
+<div class="paragraph"> </div>
+
+ As Coq users know, Gallina only allows to implement strictly recursive
+    functions, which means a function in Coq will always terminate. A webserver,
+    on the other hand, is expected to run as long as incoming connections
+    arrive.  FreeSpec will eventually deal with non-termination, but this has
+    not been our priority just yet. In the context of this tutorial, we
+    compromise and <tt>MiniHTTPServer</tt> will therefore only accept a finite number
+    of connections. However, we show that it is correct for any number of finite
+    steps.
+
+<div class="paragraph"> </div>
+
+    To implement this behavior, we introduce <span class="inlinecode"><span class="id" title="var">repeatM</span></span>, which repeats an impure
+    computation <span class="inlinecode"><span class="id" title="var">n</span></span> times. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Fixpoint</span> <a name="repeatM"><span class="id" title="definition">repeatM</span></a> `{<span class="id" title="class">Monad</span> <span class="id" title="var">m</span>} {<span class="id" title="var">a</span>} (<span class="id" title="var">n</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#nat"><span class="id" title="inductive">nat</span></a>) (<span class="id" title="var">p</span> : <a class="idref" href="server.html#m"><span class="id" title="variable">m</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a>) : <a class="idref" href="server.html#m"><span class="id" title="variable">m</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="keyword">match</span> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a> <span class="id" title="keyword">with</span><br/>
+&nbsp;&nbsp;| <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#O"><span class="id" title="constructor">O</span></a> =&gt; <span class="id" title="method">pure</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#tt"><span class="id" title="constructor">tt</span></a><br/>
+&nbsp;&nbsp;| <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#S"><span class="id" title="constructor">S</span></a> <span class="id" title="var">n</span> =&gt; <span class="id" title="notation">do</span> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a> <span class="id" title="notation">&gt;&gt;=</span> <span class="id" title="keyword">fun</span> <span class="id" title="var">_</span> =&gt; <a class="idref" href="server.html#repeatM"><span class="id" title="definition">repeatM</span></a> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a> <span class="id" title="notation">end</span><br/>
+&nbsp;&nbsp;<span class="id" title="keyword">end</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab8"></a><h3 class="section">A Generic TCP Server</h3>
+
+<div class="paragraph"> </div>
+
+ We first define a generic TCP Server as an impure computation parameterized
+    by a so-called handler, that is an impure computation which computes a
+    response message for each request message received from a client. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="tcp_server"><span class="id" title="definition">tcp_server</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">n</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#nat"><span class="id" title="inductive">nat</span></a>) (<span class="id" title="var">handler</span> : <span class="id" title="record">bytes</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="notation">do</span> <span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">server</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#new_tcp_socket"><span class="id" title="definition">new_tcp_socket</span></a> "127.0.0.1:8088" <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#listen_incoming_connection"><span class="id" title="definition">listen_incoming_connection</span></a> <a class="idref" href="server.html#server"><span class="id" title="variable">server</span></a><span class="id" title="notation">;</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#repeatM"><span class="id" title="definition">repeatM</span></a> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a> <span class="id" title="notation">do</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">client</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#accept_connection"><span class="id" title="definition">accept_connection</span></a> <a class="idref" href="server.html#server"><span class="id" title="variable">server</span></a> <span class="id" title="notation">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">req</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#read_socket"><span class="id" title="definition">read_socket</span></a> <a class="idref" href="server.html#client"><span class="id" title="variable">client</span></a> <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">res</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#handler"><span class="id" title="variable">handler</span></a> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a> <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#write_socket"><span class="id" title="definition">write_socket</span></a> <a class="idref" href="server.html#client"><span class="id" title="variable">client</span></a> <a class="idref" href="server.html#res"><span class="id" title="variable">res</span></a><span class="id" title="notation">;</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#close_socket"><span class="id" title="definition">close_socket</span></a> <a class="idref" href="server.html#client"><span class="id" title="variable">client</span></a><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">end</span><span class="id" title="notation">;</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#close_socket"><span class="id" title="definition">close_socket</span></a> <a class="idref" href="server.html#server"><span class="id" title="variable">server</span></a><br/>
+&nbsp;&nbsp;<span class="id" title="notation">end</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab9"></a><h3 class="section">A HTTP Handler</h3>
+
+<div class="paragraph"> </div>
+
+ <tt>MiniHTTPServer</tt> is a minimal server which serves static files over HTTP.
+    The main task of its handler will perform is therefore to fetch the content
+    of a file identified by a given path. To implement this behavior, we define
+    an impure computation <span class="inlinecode"><span class="id" title="var">read_content</span></span>, which performs some logging in
+    addition to interacting with the file system.
+
+<div class="paragraph"> </div>
+
+    As such, <span class="inlinecode"><span class="id" title="var">read_content</span></span> uses two interfaces. We can specify that thanks to
+    <span class="inlinecode"><span class="id" title="var">Provide</span></span>, for instance with <span class="inlinecode">`{<span class="id" title="var">Provide</span></span> <span class="inlinecode"><span class="id" title="var">ix</span></span> <span class="inlinecode"><span class="id" title="var">CONSOLE</span>,</span> <span class="inlinecode"><span class="id" title="var">Provide</span></span> <span class="inlinecode"><span class="id" title="var">ix</span></span> <span class="inlinecode"><span class="id" title="var">FILESYSTEM</span>}</span>.
+    FreeSpec provides <span class="inlinecode"><span class="id" title="var">Provide2</span></span>, <span class="inlinecode"><span class="id" title="var">Provide3</span></span>, <span class="inlinecode"><span class="id" title="var">Provide4</span></span>, and <span class="inlinecode"><span class="id" title="var">Provide5</span></span> to make
+    the type more readable. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="read_content"><span class="id" title="definition">read_content</span></a> `{<span class="id" title="class">Provide2</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <span class="id" title="record">bytes</span> :=<br/>
+&nbsp;&nbsp;<span class="id" title="notation">do</span> <span class="id" title="definition">echo</span> ("  reading &lt;" <span class="id" title="notation">++</span> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a> <span class="id" title="notation">++</span> "&gt;... ")<span class="id" title="notation">;</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">fd</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#open"><span class="id" title="definition">open</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a> <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">c</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#read"><span class="id" title="definition">read</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#close"><span class="id" title="definition">close</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a><span class="id" title="notation">;</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="definition">echo</span> ("done.\n")<span class="id" title="notation">;</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="method">pure</span> <a class="idref" href="server.html#c"><span class="id" title="variable">c</span></a><br/>
+&nbsp;&nbsp;<span class="id" title="notation">end</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Using this utility function, we can define the handler itself.
+
+<div class="paragraph"> </div>
+
+    The parsing of the incoming HTTP requests, and the serialization of HTTP
+    response have been implemented in Coq, but are not relevant in this
+    tutorial. They are provided inside the <tt>coq-MiniHTTPServer</tt> and we reuse
+    them. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">From</span> <span class="id" title="var">MiniHTTPServer</span> <span class="id" title="keyword">Require</span> <span class="id" title="keyword">Import</span> <span class="id" title="library">URI</span> <span class="id" title="library">HTTP</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+This provides the following types and functions:
+
+<div class="paragraph"> </div>
+
+<ul class="doclist">
+<li> <span class="inlinecode"><span class="id" title="var">http_req</span></span> encodes the supported HTTP requests (currently, only GET
+        requests are supported).
+
+</li>
+<li> <span class="inlinecode"><span class="id" title="var">http_request</span></span> a parsing function of the form <span class="inlinecode"><span class="id" title="var">bytes</span></span> <span class="inlinecode">-&gt;</span> <span class="inlinecode"><span class="id" title="var">error_stack</span></span> <span class="inlinecode">+</span>
+        <span class="inlinecode"><span class="id" title="var">http_req</span></span>
+
+</li>
+<li> <span class="inlinecode"><span class="id" title="var">http_res</span></span> encodes the HTTP responses used by MiniHTTPServer (in our
+        case, 200, 401, and 404)
+
+</li>
+<li> <span class="inlinecode"><span class="id" title="var">response_to_string</span></span> to serialize a response as a valid HTTP string. 
+</li>
+</ul>
+
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="request_handler"><span class="id" title="definition">request_handler</span></a> `{<span class="id" title="class">Provide2</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">base</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#list"><span class="id" title="inductive">list</span></a> <span class="id" title="inductive">directory_id</span>) (<span class="id" title="var">req</span> : <span class="id" title="inductive">request</span>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <span class="id" title="record">response</span> :=<br/>
+&nbsp;&nbsp;<span class="id" title="keyword">match</span> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a> <span class="id" title="keyword">with</span><br/>
+&nbsp;&nbsp;| <span class="id" title="constructor">Get</span> <span class="id" title="var">uri</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">do</span> <span class="id" title="notation">let</span> <span class="id" title="var">path</span> <span class="id" title="notation">:=</span> <span class="id" title="definition">uri_to_path</span> (<span class="id" title="definition">sandbox</span> <a class="idref" href="server.html#base"><span class="id" title="variable">base</span></a> <span class="id" title="var">uri</span>) <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">isf</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#file_exists"><span class="id" title="definition">file_exists</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a> <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="keyword">if</span> (<a class="idref" href="server.html#isf"><span class="id" title="variable">isf</span></a> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#bool"><span class="id" title="inductive">bool</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="keyword">then</span> <span class="id" title="constructor">make_response</span> <span class="id" title="constructor">success_OK</span> <span class="id" title="notation">&lt;$&gt;</span> <a class="idref" href="server.html#read_content"><span class="id" title="definition">read_content</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="keyword">else</span> <span class="id" title="notation">do</span> <span class="id" title="definition">echo</span> ("  resource &lt;" <span class="id" title="notation">++</span> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a> <span class="id" title="notation">++</span>"&gt; not found\n")<span class="id" title="notation">;</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="method">pure</span> (<span class="id" title="constructor">make_response</span> <span class="id" title="constructor">client_error_NotFound</span> "Resource not found.")<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">end</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">end</span><br/>
+&nbsp;&nbsp;<span class="id" title="keyword">end</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="http_handler"><span class="id" title="definition">http_handler</span></a> `{<span class="id" title="class">Provide2</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">base</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#list"><span class="id" title="inductive">list</span></a> <span class="id" title="inductive">directory_id</span>) (<span class="id" title="var">req</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <span class="id" title="record">bytes</span> :=<br/>
+&nbsp;&nbsp;<span class="id" title="notation">do</span> <span class="id" title="definition">echo</span> "new request received\n"<span class="id" title="notation">;</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="definition">echo</span> ("  request size is " <span class="id" title="notation">++</span> <span class="id" title="definition">Int.bytes_of_int</span> (<span class="id" title="definition">Bytes.length</span> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a>) <span class="id" title="notation">++</span> "\n")<span class="id" title="notation">;</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">res</span> <span class="id" title="notation">:=</span> <span class="id" title="keyword">match</span> <span class="id" title="definition">http_request</span> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a> <span class="id" title="keyword">with</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#inr"><span class="id" title="constructor">inr</span></a> <span class="id" title="var">req</span> =&gt; <a class="idref" href="server.html#request_handler"><span class="id" title="definition">request_handler</span></a> <a class="idref" href="server.html#base"><span class="id" title="variable">base</span></a> (<a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#fst"><span class="id" title="definition">fst</span></a> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| <span class="id" title="var">_</span> =&gt; <span class="id" title="method">pure</span> (<span class="id" title="constructor">make_response</span> <span class="id" title="constructor">client_error_BadRequest</span> "Bad request")<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="keyword">end</span> <span class="id" title="notation">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="method">pure</span> (<span class="id" title="definition">response_to_string</span> <a class="idref" href="server.html#res"><span class="id" title="variable">res</span></a>)<br/>
+&nbsp;&nbsp;<span class="id" title="notation">end</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Since <span class="inlinecode"><span class="id" title="var">read_content</span></span> uses the <span class="inlinecode"><span class="id" title="var">CONSOLE</span></span> interface in addition to
+    <span class="inlinecode"><span class="id" title="var">FILESYSTEM</span></span>, our <span class="inlinecode"><span class="id" title="var">http_handler</span></span> type exposes this explicitely. However,
+    <span class="inlinecode"><span class="id" title="var">http_handler</span></span> does not use the <span class="inlinecode"><span class="id" title="var">TCP</span></span> interface itself, and therefore the
+    <span class="inlinecode"><span class="id" title="var">TCP</span></span> interface does not appear inside its type even if in practice it will
+    be used in a context where <span class="inlinecode"><span class="id" title="var">TCP</span></span> is available.
+
+<div class="paragraph"> </div>
+
+    <span class="inlinecode"><span class="id" title="var">http_server</span></span> is the final function, the <span class="inlinecode"><span class="id" title="var">tcp_server</span></span> is specialized with
+    our <span class="inlinecode"><span class="id" title="var">http_handler</span></span>. As a consequence, the type of <span class="inlinecode"><span class="id" title="var">http_server</span></span> exposes the
+    three interfaces we use. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="http_server"><span class="id" title="definition">http_server</span></a> `{<span class="id" title="class">Provide3</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <span class="id" title="inductive">CONSOLE</span>} (<span class="id" title="var">n</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#nat"><span class="id" title="inductive">nat</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="notation">do</span> <span class="id" title="definition">echo</span> "hello, MiniHTTPServer!\n"<span class="id" title="notation">;</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#tcp_server"><span class="id" title="definition">tcp_server</span></a> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a> (<a class="idref" href="server.html#http_handler"><span class="id" title="definition">http_handler</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Lists.List.html#ddd65c2f7ee73ecec433744948d846bb"><span class="id" title="notation">[</span></a><span class="id" title="constructor">Dirname</span> "tmp"<a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Lists.List.html#ddd65c2f7ee73ecec433744948d846bb"><span class="id" title="notation">]</span></a>)<br/>
+&nbsp;&nbsp;<span class="id" title="notation">end</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab10"></a><h1 class="section">II. Certifying</h1>
+
+<div class="paragraph"> </div>
+
+ As a reminder, our goal is to prove our HTTP server correctly use the
+    filesystem, that is it reads from and closes valid file descriptors, and
+    closes all its file descriptors. To that end, we need to define a contract
+    for the <span class="inlinecode"><span class="id" title="var">FILESYSTEM</span></span> interface, then reason about <span class="inlinecode"><span class="id" title="var">http_server</span></span> executions
+    w.r.t. this contract. 
+<div class="paragraph"> </div>
+
+<a name="lab11"></a><h2 class="section">II.1. Defining a Contract</h2>
+
+<div class="paragraph"> </div>
+
+ Defining a contract for an interface in FreeSpec means specifying how an
+    interface shall be used, but also what to expect from the results of its
+    primitives. 
+<div class="paragraph"> </div>
+
+<a name="lab12"></a><h3 class="section">The Witness State Type and Helpers</h3>
+
+<div class="paragraph"> </div>
+
+ A contract in FreeSpec has a so-called witness state attached to it. It
+    allows to take into account the stateful nature of impure computations and
+    primitives implementers. More precisely, a primitive of an interface which
+    could be used at a given time may become forbidden in the future.
+
+<div class="paragraph"> </div>
+
+    This is precisely the case with our use case: a valid file descriptor
+    becomes invalid once it has been used as an arguent of the <span class="inlinecode"><span class="id" title="var">Close</span></span>
+    primitive. Witness states shall be as simple as possible, and only holds the
+    minimum amount of information about past executed primitives. In our case,
+    the witness state can be as simple as a set of open file descriptors. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="fd_set"><span class="id" title="definition">fd_set</span></a> : <span class="id" title="keyword">Type</span> := <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#bool"><span class="id" title="inductive">bool</span></a>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+In addition, we provide the usuals helpers to manipulate (addition,
+    deletion) and reason about sets. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Axiom</span> <a name="fd_eq_dec"><span class="id" title="axiom">fd_eq_dec</span></a> : <span class="id" title="keyword">forall</span> (<span class="id" title="var">fd1</span> <span class="id" title="var">fd2</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>), <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Specif.html#87727981cdc1579fef00b9d9c1d3b9da"><span class="id" title="notation">{</span></a> <a class="idref" href="server.html#fd1"><span class="id" title="variable">fd1</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#6cd0f7b28b6092304087c7049437bb1a"><span class="id" title="notation">=</span></a> <a class="idref" href="server.html#fd2"><span class="id" title="variable">fd2</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Specif.html#87727981cdc1579fef00b9d9c1d3b9da"><span class="id" title="notation">}</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Specif.html#87727981cdc1579fef00b9d9c1d3b9da"><span class="id" title="notation">+</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Specif.html#87727981cdc1579fef00b9d9c1d3b9da"><span class="id" title="notation">{</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#63a68285c81db8f9bc456233bb9ed181"><span class="id" title="notation">~</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#63a68285c81db8f9bc456233bb9ed181"><span class="id" title="notation">(</span></a><a class="idref" href="server.html#fd1"><span class="id" title="variable">fd1</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#6cd0f7b28b6092304087c7049437bb1a"><span class="id" title="notation">=</span></a> <a class="idref" href="server.html#fd2"><span class="id" title="variable">fd2</span></a><a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#63a68285c81db8f9bc456233bb9ed181"><span class="id" title="notation">)</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Specif.html#87727981cdc1579fef00b9d9c1d3b9da"><span class="id" title="notation">}</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="add_fd"><span class="id" title="definition">add_fd</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="keyword">fun</span> (<span class="id" title="var">fd'</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) =&gt; <span class="id" title="keyword">if</span> <a class="idref" href="server.html#fd_eq_dec"><span class="id" title="axiom">fd_eq_dec</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <a class="idref" href="server.html#fd'"><span class="id" title="variable">fd'</span></a> <span class="id" title="keyword">then</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#true"><span class="id" title="constructor">true</span></a> <span class="id" title="keyword">else</span> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd'"><span class="id" title="variable">fd'</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="del_fd"><span class="id" title="definition">del_fd</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="keyword">fun</span> (<span class="id" title="var">fd'</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) =&gt; <span class="id" title="keyword">if</span> <a class="idref" href="server.html#fd_eq_dec"><span class="id" title="axiom">fd_eq_dec</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <a class="idref" href="server.html#fd'"><span class="id" title="variable">fd'</span></a> <span class="id" title="keyword">then</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#false"><span class="id" title="constructor">false</span></a> <span class="id" title="keyword">else</span> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd'"><span class="id" title="variable">fd'</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="member"><span class="id" title="definition">member</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <span class="id" title="keyword">Prop</span> :=<br/>
+&nbsp;&nbsp;<a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#6cd0f7b28b6092304087c7049437bb1a"><span class="id" title="notation">=</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#true"><span class="id" title="constructor">true</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="absent"><span class="id" title="definition">absent</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <span class="id" title="keyword">Prop</span> :=<br/>
+&nbsp;&nbsp;<a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#6cd0f7b28b6092304087c7049437bb1a"><span class="id" title="notation">=</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#false"><span class="id" title="constructor">false</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="member_not_absent"><span class="id" title="lemma">member_not_absent</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#63a68285c81db8f9bc456233bb9ed181"><span class="id" title="notation">~</span></a> <a class="idref" href="server.html#absent"><span class="id" title="definition">absent</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">unfold</span> <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a>, <a class="idref" href="server.html#absent"><span class="id" title="definition">absent</span></a>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> <span class="id" title="var">m</span> <span class="id" title="var">a</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">now</span> <span class="id" title="tactic">rewrite</span> <span class="id" title="var">m</span> <span class="id" title="tactic">in</span> <span class="id" title="var">a</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">member_not_absent</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="absent_not_member"><span class="id" title="lemma">absent_not_member</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#absent"><span class="id" title="definition">absent</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#63a68285c81db8f9bc456233bb9ed181"><span class="id" title="notation">~</span></a> <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">unfold</span> <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a>, <a class="idref" href="server.html#absent"><span class="id" title="definition">absent</span></a>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> <span class="id" title="var">a</span> <span class="id" title="var">m</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">now</span> <span class="id" title="tactic">rewrite</span> <span class="id" title="var">m</span> <span class="id" title="tactic">in</span> <span class="id" title="var">a</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">absent_not_member</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="member_add_fd"><span class="id" title="lemma">member_add_fd</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) : <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a> (<a class="idref" href="server.html#add_fd"><span class="id" title="definition">add_fd</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>) <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">unfold</span> <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a>, <a class="idref" href="server.html#add_fd"><span class="id" title="definition">add_fd</span></a>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">destruct</span> <a class="idref" href="server.html#fd_eq_dec"><span class="id" title="axiom">fd_eq_dec</span></a>; <span class="id" title="tactic">auto</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">member_add_fd</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab13"></a><h3 class="section">The Update Function</h3>
+
+<div class="paragraph"> </div>
+
+ In FreeSpec, a contract provides a so-called “update function” to be used to
+    reason about an interface usage over time. At any computation step requiring
+    the use of a primitive, the “current” witness state is used to determine
+    both the caller and the callee obligations. Then, the update function is
+    used to update the witness state to take into account what happened for
+    future primitives execution.
+
+<div class="paragraph"> </div>
+
+    In our case, since the witness state is just a set of open file descriptors
+    and does not hold any information about e.g. file actual content, the update
+    function remains simple: we add newly open file descriptor after <span class="inlinecode"><span class="id" title="keyword">Open</span></span>, and
+    remove them after <span class="inlinecode"><span class="id" title="var">Close</span></span>. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="fd_set_update"><span class="id" title="definition">fd_set_update</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">a</span> : <span class="id" title="keyword">Type</span>) (<span class="id" title="var">e</span> : <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a>) (<span class="id" title="var">x</span> : <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a>) : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a> :=<br/>
+&nbsp;&nbsp;<span class="id" title="keyword">match</span> <a class="idref" href="server.html#e"><span class="id" title="variable">e</span></a>, <a class="idref" href="server.html#x"><span class="id" title="variable">x</span></a> <span class="id" title="keyword">with</span><br/>
+&nbsp;&nbsp;| <a class="idref" href="server.html#Open"><span class="id" title="constructor">Open</span></a> <span class="id" title="var">_</span>, <span class="id" title="var">fd</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#add_fd"><span class="id" title="definition">add_fd</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <span class="id" title="var">fd</span><br/>
+&nbsp;&nbsp;| <a class="idref" href="server.html#Close"><span class="id" title="constructor">Close</span></a> <span class="id" title="var">fd</span>, <span class="id" title="var">_</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#del_fd"><span class="id" title="definition">del_fd</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <span class="id" title="var">fd</span><br/>
+&nbsp;&nbsp;| <a class="idref" href="server.html#Read"><span class="id" title="constructor">Read</span></a> <span class="id" title="var">_</span>, <span class="id" title="var">_</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a><br/>
+&nbsp;&nbsp;| <a class="idref" href="server.html#FileExists"><span class="id" title="constructor">FileExists</span></a> <span class="id" title="var">_</span>, <span class="id" title="var">_</span> =&gt;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a><br/>
+&nbsp;&nbsp;<span class="id" title="keyword">end</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab14"></a><h3 class="section">The Caller Obligations</h3>
+
+<div class="paragraph"> </div>
+
+ Our experiment with FreeSpec has tended to show that using inductive types
+    for obligations is the more convenient approach in practice, but this comes
+    with a tradeoff in terms of readability. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Inductive</span> <a name="fd_set_caller_obligation"><span class="id" title="inductive">fd_set_caller_obligation</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="keyword">forall</span> (<span class="id" title="var">a</span> : <span class="id" title="keyword">Type</span>), <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <span class="id" title="keyword">Prop</span> :=<br/>
+<br/>
+</div>
+
+<div class="doc">
+We do not restrict the use of <span class="inlinecode"><span class="id" title="keyword">Open</span></span> or <span class="inlinecode"><span class="id" title="var">FileExists</span></span> 
+</div>
+<div class="code">
+<br/>
+| <a name="fd_set_open_caller"><span class="id" title="constructor">fd_set_open_caller</span></a> (<span class="id" title="var">p</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_caller_obligation"><span class="id" title="inductive">fd_set_caller_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a> (<a class="idref" href="server.html#Open"><span class="id" title="constructor">Open</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>)<br/>
+| <a name="fd_set_is_file_caller"><span class="id" title="constructor">fd_set_is_file_caller</span></a> (<span class="id" title="var">p</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_caller_obligation"><span class="id" title="inductive">fd_set_caller_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#bool"><span class="id" title="inductive">bool</span></a> (<a class="idref" href="server.html#FileExists"><span class="id" title="constructor">FileExists</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>)<br/>
+<br/>
+</div>
+
+<div class="doc">
+In order for <span class="inlinecode"><span class="id" title="var">Read</span></span> and <span class="inlinecode"><span class="id" title="var">Close</span></span> to be used correctly, their
+    <span class="inlinecode"><span class="id" title="var">file_descriptor</span></span> argument has to be a member of the witness state. 
+</div>
+<div class="code">
+<br/>
+| <a name="fd_set_read_caller"><span class="id" title="constructor">fd_set_read_caller</span></a> (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">is_member</span> : <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_caller_obligation"><span class="id" title="inductive">fd_set_caller_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <span class="id" title="record">bytes</span> (<a class="idref" href="server.html#Read"><span class="id" title="constructor">Read</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>)<br/>
+| <a name="fd_set_close_caller"><span class="id" title="constructor">fd_set_close_caller</span></a> (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">is_member</span> : <a class="idref" href="server.html#member"><span class="id" title="definition">member</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_caller_obligation"><span class="id" title="inductive">fd_set_caller_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> (<a class="idref" href="server.html#Close"><span class="id" title="constructor">Close</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Constructors</span> <a class="idref" href="server.html#fd_set_caller_obligation"><span class="id" title="inductive">fd_set_caller_obligation</span></a> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab15"></a><h3 class="section">The Callee Obligations</h3>
+
+<div class="paragraph"> </div>
+
+ The callee obligations of our contract are not as straightforward as the
+    caller obligations. It appears that we could potentially require nothing
+    special from a <span class="inlinecode"><span class="id" title="var">FILESYSTEM</span></span> implementer for our particular use case. There
+    is, however, one scenario that we want to avoid in practice:
+
+<div class="paragraph"> </div>
+
+<ul class="doclist">
+<li> The caller opens two different files
+
+</li>
+<li> The callee returns the same file descriptor for both files
+
+</li>
+<li> the caller closes one file descriptor, and uses the second one
+
+</li>
+</ul>
+
+<div class="paragraph"> </div>
+
+    In such a scenario, the caller misuses the interface in good faith. To avoid
+    this, we require the <span class="inlinecode"><span class="id" title="keyword">Open</span></span> primitives to return <i>fresh</i> file
+    descriptors. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Inductive</span> <a name="fd_set_callee_obligation"><span class="id" title="inductive">fd_set_callee_obligation</span></a> (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="keyword">forall</span> (<span class="id" title="var">a</span> : <span class="id" title="keyword">Type</span>), <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <span class="id" title="keyword">Prop</span> :=<br/>
+<br/>
+</div>
+
+<div class="doc">
+The <span class="inlinecode"><span class="id" title="var">file_descriptor</span></span> returned by the <span class="inlinecode"><span class="id" title="keyword">Open</span></span> primitive shall not be a member
+    of the witness state. 
+</div>
+<div class="code">
+<br/>
+| <a name="fd_set_open_callee"><span class="id" title="constructor">fd_set_open_callee</span></a> (<span class="id" title="var">p</span> : <span class="id" title="record">bytes</span>) (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">is_absent</span> : <a class="idref" href="server.html#absent"><span class="id" title="definition">absent</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_callee_obligation"><span class="id" title="inductive">fd_set_callee_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a> (<a class="idref" href="server.html#Open"><span class="id" title="constructor">Open</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>) <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a><br/>
+<br/>
+</div>
+
+<div class="doc">
+We do not specify any particular requirements for the results of the other
+    primitives. Therefore, we cannot use this contract to reason about the
+    result of reading twice the same file, for instance. This would require
+    another contract, which is totally fine with FreeSpec since we can compose
+    them together. 
+</div>
+<div class="code">
+<br/>
+| <a name="fd_set_read_callee"><span class="id" title="constructor">fd_set_read_callee</span></a> (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) (<span class="id" title="var">s</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_callee_obligation"><span class="id" title="inductive">fd_set_callee_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <span class="id" title="record">bytes</span> (<a class="idref" href="server.html#Read"><span class="id" title="constructor">Read</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>) <a class="idref" href="server.html#s"><span class="id" title="variable">s</span></a><br/>
+| <a name="fd_set_close_callee"><span class="id" title="constructor">fd_set_close_callee</span></a> (<span class="id" title="var">fd</span> : <a class="idref" href="server.html#file_descriptor"><span class="id" title="axiom">file_descriptor</span></a>) (<span class="id" title="var">t</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_callee_obligation"><span class="id" title="inductive">fd_set_callee_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#unit"><span class="id" title="inductive">unit</span></a> (<a class="idref" href="server.html#Close"><span class="id" title="constructor">Close</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>) <a class="idref" href="server.html#t"><span class="id" title="variable">t</span></a><br/>
+| <a name="fd_set_is_file_callee"><span class="id" title="constructor">fd_set_is_file_callee</span></a> (<span class="id" title="var">p</span> : <span class="id" title="record">bytes</span>) (<span class="id" title="var">b</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#bool"><span class="id" title="inductive">bool</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_callee_obligation"><span class="id" title="inductive">fd_set_callee_obligation</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#bool"><span class="id" title="inductive">bool</span></a> (<a class="idref" href="server.html#FileExists"><span class="id" title="constructor">FileExists</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>) <a class="idref" href="server.html#b"><span class="id" title="variable">b</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Constructors</span> <a class="idref" href="server.html#fd_set_callee_obligation"><span class="id" title="inductive">fd_set_callee_obligation</span></a> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab16"></a><h3 class="section">The Contract Definition</h3>
+
+<div class="paragraph"> </div>
+
+ We put everything together by defining a term of type <span class="inlinecode"><span class="id" title="var">contract</span></span> <span class="inlinecode"><span class="id" title="var">FILESYSTEM</span></span>
+    <span class="inlinecode"><span class="id" title="var">fd</span></span> <span class="inlinecode"><span class="id" title="tactic">set</span></span>. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> : <span class="id" title="record">contract</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a> :=<br/>
+&nbsp;&nbsp;{| <span class="id" title="constructor">witness_update</span> <span class="id" title="constructor">:=</span> <span class="id" title="constructor">fd_set_update</span><br/>
+&nbsp;&nbsp;&nbsp;<span class="id" title="constructor">;</span> <span class="id" title="constructor">caller_obligation</span> <span class="id" title="constructor">:=</span> <span class="id" title="constructor">fd_set_caller_obligation</span><br/>
+&nbsp;&nbsp;&nbsp;<span class="id" title="constructor">;</span> <span class="id" title="constructor">callee_obligation</span> <span class="id" title="constructor">:=</span> <span class="id" title="constructor">fd_set_callee_obligation</span><br/>
+&nbsp;&nbsp;|}.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab17"></a><h2 class="section">II.2. Problem Definition</h2>
+
+<div class="paragraph"> </div>
+
+ From the caller perspective, there is two concerns that we want to express.
+    First, we <i>always</i> use correct file descriptors. Secondly, we <i>eventually</i>
+    close any file descriptor previously opened.
+
+<div class="paragraph"> </div>
+
+    The first objective is a <i>safety</i> property that we can express
+    using the <span class="inlinecode"><span class="id" title="var">respectful_impure</span></span> predicate. The exact lemma is:
+
+<div class="paragraph"> </div>
+
+<pre>
+Lemma fd_set_respectful_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+    (ω : fd_set) (n : nat)
+  : respectful_impure fd_set_contract ω (http_server n).
+</pre>
+
+<div class="paragraph"> </div>
+
+    The <span class="inlinecode"><span class="id" title="var">StrictProvide3</span></span> typeclass is very analogous to the <span class="inlinecode"><span class="id" title="var">Provide3</span></span> one, but
+    it requires more contrains about its arguments. The exact details about
+    the difference is out of the scope of this tutorial, especially since the
+    two typeclasses with eventually be merged together.
+
+<div class="paragraph"> </div>
+
+    The second objective is a <i>liveness</i> property that we can express agains the
+    final witness state. This can be acheived using the <span class="inlinecode"><span class="id" title="var">respectful_run</span></span>
+    predicate provided by FreeSpec.
+
+<div class="paragraph"> </div>
+
+<pre>
+Lemma fd_set_preserving_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+      (n : nat)
+  : forall (ω ω' : fd_set) (x : unit),
+    respectful_run fd_set_contract (http_server n) ω ω' x
+    -&gt; forall fd, ω fd = ω' fd.
+</pre>
+
+<div class="paragraph"> </div>
+
+    This property can be read as: any <span class="inlinecode"><span class="id" title="var">file_descriptor</span></span> which is opened during
+    the execution of <span class="inlinecode"><span class="id" title="var">http_server</span></span> is closed before the execution ends. This
+    is a property that we generalize for any impure computations:  
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Definition</span> <a name="fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> {<span class="id" title="var">a</span>} `{<span class="id" title="class">MayProvide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>} (<span class="id" title="var">p</span> : <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a>) :=<br/>
+&nbsp;&nbsp;<span class="id" title="keyword">forall</span> (ω ω' : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">x</span> : <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a>),<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="inductive">respectful_run</span> <a class="idref" href="server.html#fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#ae81890f8f5f283f248d9c073a89a4aa"><span class="id" title="variable">ω'</span></a> <a class="idref" href="server.html#x"><span class="id" title="variable">x</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <span class="id" title="keyword">forall</span> <span class="id" title="var">fd</span>, <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#6cd0f7b28b6092304087c7049437bb1a"><span class="id" title="notation">=</span></a> <a class="idref" href="server.html#ae81890f8f5f283f248d9c073a89a4aa"><span class="id" title="variable">ω'</span></a> <a class="idref" href="server.html#fd"><span class="id" title="variable">fd</span></a>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+And, as a consequence, the second lemma we want to prove becomes:
+
+<div class="paragraph"> </div>
+
+<pre>
+Lemma fd_set_preserving_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+    (n : nat)
+  : fd_set_preserving (http_server n).
+</pre>
+ 
+<div class="paragraph"> </div>
+
+<a name="lab18"></a><h2 class="section">II.3. <tt>MiniHTTPServer</tt> Proofs of Correctness</h2>
+
+<div class="paragraph"> </div>
+
+ We now have defined everything we need to prove the correctness of
+    <tt>MiniHTTPServer</tt>. The rest of this tutorial consists in actually write the
+    proofs. Our approach is bottom-up: we start from the leaves of our
+    computations, show they have some important properties, then reuse our
+    result to eventually conclude about the correctness of the whole program. 
+<div class="paragraph"> </div>
+
+<a name="lab19"></a><h3 class="section">Certifying <span class="inlinecode"><span class="id" title="var">read_content</span></span></h3>
+
+<div class="paragraph"> </div>
+
+ From the perspective of this tutorial, the <span class="inlinecode"><span class="id" title="var">read_content</span></span> impure computation
+    is an interesting starting point: it uses two primitives that can be misused
+    according to the <span class="inlinecode"><span class="id" title="var">fd_set_contract</span></span> (<span class="inlinecode"><span class="id" title="var">Read</span></span>, and <span class="inlinecode"><span class="id" title="var">Close</span></span>), and it also uses
+    an interface which is not relevant from the perspective of <span class="inlinecode"><span class="id" title="var">fd_set_contract</span></span>
+    (<span class="inlinecode"><span class="id" title="var">CONSOLE</span></span>). 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_respectful_read_content"><span class="id" title="lemma">fd_set_respectful_read_content</span></a> `{<span class="id" title="class">StrictProvide2</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">respectful_impure</span> <a class="idref" href="server.html#fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> (<a class="idref" href="server.html#read_content"><span class="id" title="definition">read_content</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a>).<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+FreeSpec provides the <span class="inlinecode"><span class="id" title="var">prove_impure</span></span> tactics to automate as much as possible
+    the construction of a proof for <span class="inlinecode"><span class="id" title="var">respectful_impure</span></span> goals. It performs many
+    uninteresting tasks that FreeSpec users would have to do manually if they
+    decided not to use it. For the sake of demonstration, we attempt to do just that,
+    and use <span class="inlinecode"><span class="id" title="tactic">repeat</span></span> <span class="inlinecode"><span class="id" title="tactic">constructor</span></span>.
+
+<div class="paragraph"> </div>
+
+    This generates 5 hardly readable subgoals, for instance the 5th subgoal is:
+
+<div class="paragraph"> </div>
+
+<pre>
+  ω : fd_set
+  path : bytes
+  x : unit
+  H4 : gen_callee_obligation fd_set_contract ω
+         (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x
+  x0 : file_descriptor
+  H5 : gen_callee_obligation fd_set_contract
+         (gen_witness_update fd_set_contract ω
+            (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x)
+         (inj_p (Open path)) x0
+  x1 : bytes
+  H6 : gen_callee_obligation fd_set_contract
+         (gen_witness_update fd_set_contract
+            (gen_witness_update fd_set_contract ω
+               (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x)
+            (inj_p (Open path)) x0) (inj_p (Read x0)) x1
+  x2 : unit
+  H7 : gen_callee_obligation fd_set_contract
+         (gen_witness_update fd_set_contract
+            (gen_witness_update fd_set_contract
+               (gen_witness_update fd_set_contract ω
+                  (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x)
+               (inj_p (Open path)) x0) (inj_p (Read x0)) x1)
+         (inj_p (Close x0)) x2
+  ============================
+ gen_caller_obligation fd_set_contract
+   (gen_witness_update fd_set_contract
+      (gen_witness_update fd_set_contract
+         (gen_witness_update fd_set_contract
+            (gen_witness_update fd_set_contract ω
+               (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x)
+            (inj_p (Open path)) x0) (inj_p (Read x0)) x1)
+      (inj_p (Close x0)) x2) (inj_p (Echo "done.
+"))
+</pre>
+
+<div class="paragraph"> </div>
+
+    <span class="inlinecode"><span class="id" title="var">prove_impure</span></span> provides a much cleaner output:
+
+<div class="paragraph"> </div>
+
+<pre>
+subgoal 1 is:
+  fd_set_caller_obligation ω file_descriptor (Open path)
+
+subgoal 2 is:
+ fd_set_caller_obligation (add_fd ω x0) bytes (Read x0)
+
+subgoal 3 is:
+ fd_set_caller_obligation (add_fd ω x0) unit (Close x0)
+</pre>
+
+<div class="paragraph"> </div>
+
+    In this case, we can use the <span class="inlinecode"><span class="id" title="var">minihttp</span></span> database that we have enriched with various <span class="inlinecode"><span class="id" title="keyword">Hint</span></span>
+    to conclude automatically about this. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">prove</span> <span class="id" title="var">impure</span> <span class="id" title="keyword">with</span> <span class="id" title="var">minihttp</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">fd_set_respectful_read_content</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+The second property we want to prove about <span class="inlinecode"><span class="id" title="var">read_content</span></span> is that
+    it does not forget to close any <span class="inlinecode"><span class="id" title="var">file_descriptor</span></span>. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_preserving_read_content"><span class="id" title="lemma">fd_set_preserving_read_content</span></a> `{<span class="id" title="class">StrictProvide2</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> (<a class="idref" href="server.html#read_content"><span class="id" title="definition">read_content</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a>).<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Similarly to <span class="inlinecode"><span class="id" title="var">prove_impure</span></span>, FreeSpec provides a tactic to exploit
+    hypotheses about <span class="inlinecode"><span class="id" title="var">respectful_run</span></span>. More precisely, it explore the different
+    execution path that could lead to the production of the run in hypothesis,
+    and clean-up as much as possible the resulting alternative goals.. We can
+    explicit the tasks performed by <span class="inlinecode"><span class="id" title="var">respectful_run</span></span> with the following
+    command.
+
+<div class="paragraph"> </div>
+
+<pre>
+  repeat match goal with
+         | H : respectful_run _ _ _ _ _ |- _ =&gt; inversion H; clear H; ssubst
+         end.
+</pre>
+
+<div class="paragraph"> </div>
+
+    This produces the following goal:
+
+<div class="paragraph"> </div>
+
+<pre>
+  path : bytes
+  ω : fd_set
+  x : bytes
+  x0 : unit
+  o_callee : gen_callee_obligation fd_set_contract ω
+               (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x0
+  o_caller : gen_caller_obligation fd_set_contract ω
+               (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... ")))
+  x1 : file_descriptor
+  o_callee0 : gen_callee_obligation fd_set_contract
+                (gen_witness_update fd_set_contract ω
+                   (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x0)
+                (inj_p (Open path)) x1
+  o_caller0 : gen_caller_obligation fd_set_contract
+                (gen_witness_update fd_set_contract ω
+                   (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x0)
+                (inj_p (Open path))
+
+                               [...]
+
+  o_caller3 : gen_caller_obligation fd_set_contract
+                (gen_witness_update fd_set_contract
+                   (gen_witness_update fd_set_contract
+                      (gen_witness_update fd_set_contract
+                         (gen_witness_update fd_set_contract ω
+                            (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x0)
+                         (inj_p (Open path)) x1) (inj_p (Read x1)) x)
+                   (inj_p (Close x1)) x3) (inj_p (Echo "done.
+"))
+  o_callee3 : gen_callee_obligation fd_set_contract
+                (gen_witness_update fd_set_contract
+                   (gen_witness_update fd_set_contract
+                      (gen_witness_update fd_set_contract
+                         (gen_witness_update fd_set_contract ω
+                            (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x0)
+                         (inj_p (Open path)) x1) (inj_p (Read x1)) x)
+                   (inj_p (Close x1)) x3) (inj_p (Echo "done.
+")) x4
+  ============================
+  forall fd : file_descriptor,
+  ω fd =
+  gen_witness_update fd_set_contract
+    (gen_witness_update fd_set_contract
+       (gen_witness_update fd_set_contract
+          (gen_witness_update fd_set_contract
+             (gen_witness_update fd_set_contract ω
+                (inj_p (Echo ("  reading &lt;" ++ path ++ "&gt;... "))) x0)
+             (inj_p (Open path)) x1) (inj_p (Read x1)) x)
+       (inj_p (Close x1)) x3) (inj_p (Echo "done.
+")) x4 fd
+</pre>
+
+<div class="paragraph"> </div>
+
+    On the contrary, <span class="inlinecode"><span class="id" title="var">unroll_respectful_run</span></span> keeps the goal manageable, and once called, the FreeSpec
+    internals are gone and we can write a “classical” Coq proof. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> ω ω' <span class="id" title="var">x</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> <span class="id" title="var">fd'</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">unfold</span> <a class="idref" href="server.html#add_fd"><span class="id" title="definition">add_fd</span></a>, <a class="idref" href="server.html#del_fd"><span class="id" title="definition">del_fd</span></a>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">destruct</span> <a class="idref" href="server.html#fd_eq_dec"><span class="id" title="axiom">fd_eq_dec</span></a>; <span class="id" title="tactic">subst</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">now</span> <span class="id" title="tactic">inversion</span> <span class="id" title="var">o_callee0</span>; <span class="id" title="var">ssubst</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="tactic">reflexivity</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+The implementation details of <span class="inlinecode"><span class="id" title="var">read_content</span></span> will not be relevant with our
+    two freshly proven lemmas. Therefore, we make the impure computation to
+    prevent <span class="inlinecode"><span class="id" title="var">improve_impure</span></span> and <span class="inlinecode"><span class="id" title="var">unroll_respectful_run</span></span> to unfold them. 
+</div>
+<div class="code">
+
+<br/>
+#[<span class="id" title="var">local</span>] <span class="id" title="keyword">Opaque</span> <a class="idref" href="server.html#read_content"><span class="id" title="definition">read_content</span></a>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab20"></a><h3 class="section">Certifying <span class="inlinecode"><span class="id" title="var">file_exists</span></span></h3>
+
+<div class="paragraph"> </div>
+
+ We use the exact same approach for <span class="inlinecode"><span class="id" title="var">file_exists</span></span>. Since this computation
+    does not use any problematic primitives, the proofs are straightforward. 
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_respectful_file_exists"><span class="id" title="lemma">fd_set_respectful_file_exists</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>} (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">respectful_impure</span> <a class="idref" href="server.html#fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> (<a class="idref" href="server.html#file_exists"><span class="id" title="definition">file_exists</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">prove</span> <span class="id" title="var">impure</span> <span class="id" title="keyword">with</span> <span class="id" title="var">minihttp</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">fd_set_respectful_file_exists</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_preserving_file_exists"><span class="id" title="lemma">fd_set_preserving_file_exists</span></a> `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>} (<span class="id" title="var">path</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> (<a class="idref" href="server.html#file_exists"><span class="id" title="definition">file_exists</span></a> <a class="idref" href="server.html#path"><span class="id" title="variable">path</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> ω ω' <span class="id" title="var">x</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">now</span> <span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Again, we make <span class="inlinecode"><span class="id" title="var">file_exists</span></span> opaque because its concrete implementation is
+    not relevant anymore. 
+</div>
+<div class="code">
+
+<br/>
+#[<span class="id" title="var">local</span>] <span class="id" title="keyword">Opaque</span> <a class="idref" href="server.html#file_exists"><span class="id" title="definition">file_exists</span></a>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab21"></a><h3 class="section">Certifying <span class="inlinecode"><span class="id" title="var">http_handler</span></span></h3>
+
+<div class="paragraph"> </div>
+
+ The <span class="inlinecode"><span class="id" title="var">http_handler</span></span> is interesting, because to a large extent, it does not
+    use primitives itself: it relies on other impure computations <span class="inlinecode"><span class="id" title="var">read_content</span></span>
+    and <span class="inlinecode"><span class="id" title="var">file_exists</span></span> to do so. Interesting readers can try to remove the
+    vernacular commands which make these two computations opaques and see the
+    outputs of <span class="inlinecode"><span class="id" title="var">prove_impure</span></span> and <span class="inlinecode"><span class="id" title="var">unroll_respectful_run</span></span>: in a nutshell, they
+    would find themselves having to prove one more time the exact same goals, in
+    more crowded contexts. 
+</div>
+<div class="code">
+
+<br/>
+#[<span class="id" title="var">local</span>] <span class="id" title="keyword">Opaque</span> <span class="id" title="definition">http_request</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_respectful_http_handler"><span class="id" title="lemma">fd_set_respectful_http_handler</span></a> `{<span class="id" title="class">StrictProvide2</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">base</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#list"><span class="id" title="inductive">list</span></a> <span class="id" title="inductive">directory_id</span>) (<span class="id" title="var">req</span> : <span class="id" title="record">bytes</span>) (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">respectful_impure</span> <a class="idref" href="server.html#fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> (<a class="idref" href="server.html#http_handler"><span class="id" title="definition">http_handler</span></a> <a class="idref" href="server.html#base"><span class="id" title="variable">base</span></a> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">prove_impure</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">destruct</span> (<span class="id" title="definition">http_request</span> <span class="id" title="var">req</span>).<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">prove_impure</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="tactic">destruct</span> (<a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#fst"><span class="id" title="definition">fst</span></a> <span class="id" title="var">p</span>).<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="var">prove_impure</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+Here, <span class="inlinecode"><span class="id" title="var">prove_impure</span></span> did not unfold <span class="inlinecode"><span class="id" title="var">file_exists</span></span> and <span class="inlinecode"><span class="id" title="var">read_content</span></span>, but
+    has leveraged FreeSpec formalism to generate two clean subgoals.
+<pre>
+subgoal 1 is:
+  respectful_impure fd_set_contract ω
+    (file_exists (uri_to_path (sandbox base resource)))
+
+subgoal 2 is:
+ respectful_impure fd_set_contract w
+   (read_content (uri_to_path (sandbox base resource)))
+</pre>
+
+<div class="paragraph"> </div>
+
+    Both are straightforward to prove using the <span class="inlinecode"><span class="id" title="var">minihttp</span></span> hint database. 
+</div>
+<div class="code">
+
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="var">all</span>: <span class="id" title="tactic">eauto</span> <span class="id" title="keyword">with</span> <span class="id" title="var">minihttp</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">fd_set_respectful_http_handler</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_preserving_http_handler"><span class="id" title="lemma">fd_set_preserving_http_handler</span></a> `{<span class="id" title="class">StrictProvide2</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">base</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#list"><span class="id" title="inductive">list</span></a> <span class="id" title="inductive">directory_id</span>) (<span class="id" title="var">req</span> : <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> (<a class="idref" href="server.html#http_handler"><span class="id" title="definition">http_handler</span></a> <a class="idref" href="server.html#base"><span class="id" title="variable">base</span></a> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> ω ω' <span class="id" title="var">x</span> <span class="id" title="var">run</span> <span class="id" title="var">fd</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">destruct</span> (<span class="id" title="definition">http_request</span> <span class="id" title="var">req</span>).<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">now</span> <span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="tactic">destruct</span> <span class="id" title="var">p</span> <span class="id" title="keyword">as</span> [[<span class="id" title="var">res_id</span>] <span class="id" title="var">req'</span>].<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<span class="inlinecode"><span class="id" title="var">unroll_respectful_run</span></span> uses a simiral approach when in presence of opaque
+    terms. 
+</div>
+<div class="code">
+
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;++ <span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_file_exists"><span class="id" title="lemma">fd_set_preserving_file_exists</span></a> <span class="id" title="tactic">in</span> <span class="id" title="var">run0</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_read_content"><span class="id" title="lemma">fd_set_preserving_read_content</span></a> <span class="id" title="tactic">in</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="var">now</span> <span class="id" title="tactic">transitivity</span> (ω'' <span class="id" title="var">fd</span>).<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;++ <span class="id" title="var">now</span> <span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_file_exists"><span class="id" title="lemma">fd_set_preserving_file_exists</span></a> <span class="id" title="tactic">in</span> <span class="id" title="var">run0</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">fd_set_preserving_http_handler</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+#[<span class="id" title="var">local</span>] <span class="id" title="keyword">Opaque</span> <a class="idref" href="server.html#http_handler"><span class="id" title="definition">http_handler</span></a>.<br/>
+#[<span class="id" title="var">local</span>] <span class="id" title="keyword">Opaque</span> <span class="id" title="definition">response_to_string</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab22"></a><h3 class="section">Certifying <span class="inlinecode"><span class="id" title="var">repeatM</span></span></h3>
+
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">From</span> <span class="id" title="var">Coq</span> <span class="id" title="keyword">Require</span> <span class="id" title="keyword">Import</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Logic.FunctionalExtensionality.html#"><span class="id" title="library">FunctionalExtensionality</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_preserving_repeatM"><span class="id" title="lemma">fd_set_preserving_repeatM</span></a> {<span class="id" title="var">a</span>} `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">p</span> : <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">fd_preserving</span> : <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">n</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#nat"><span class="id" title="inductive">nat</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> (<a class="idref" href="server.html#repeatM"><span class="id" title="definition">repeatM</span></a> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> ω ω' <span class="id" title="var">fd</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">induction</span> <span class="id" title="var">n</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">now</span> <span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <span class="id" title="var">IHn</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">replace</span> ω <span class="id" title="keyword">with</span> ω''; <span class="id" title="tactic">auto</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">symmetry</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Logic.FunctionalExtensionality.html#functional_extensionality"><span class="id" title="lemma">functional_extensionality</span></a>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">eauto</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">fd_set_preserving_repeatM</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="repeatM_preserving_respectful"><span class="id" title="lemma">repeatM_preserving_respectful</span></a> {<span class="id" title="var">a</span>} `{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">p</span> : <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#a"><span class="id" title="variable">a</span></a>) (ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">fd_trust</span> : <span class="id" title="inductive">respectful_impure</span> <a class="idref" href="server.html#fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">fd_preserving</span> : <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">n</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#nat"><span class="id" title="inductive">nat</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">respectful_impure</span> <a class="idref" href="server.html#fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> (<a class="idref" href="server.html#repeatM"><span class="id" title="definition">repeatM</span></a> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a> <a class="idref" href="server.html#p"><span class="id" title="variable">p</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">induction</span> <span class="id" title="var">n</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">prove_impure</span>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">prove_impure</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;++ <span class="id" title="tactic">exact</span> <span class="id" title="var">fd_trust</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;++ <span class="id" title="tactic">replace</span> <span class="id" title="var">w</span> <span class="id" title="keyword">with</span> ω; <span class="id" title="tactic">auto</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Logic.FunctionalExtensionality.html#functional_extensionality"><span class="id" title="lemma">functional_extensionality</span></a>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">intros</span> <span class="id" title="var">fd</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">eapply</span> <span class="id" title="var">fd_preserving</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">exact</span> <span class="id" title="var">Hrun</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+#[<span class="id" title="var">local</span>] <span class="id" title="keyword">Opaque</span> <a class="idref" href="server.html#repeatM"><span class="id" title="definition">repeatM</span></a>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_preserving_tcp_server_repeat_routine"><span class="id" title="lemma">fd_set_preserving_tcp_server_repeat_routine</span></a><br/>
+&nbsp;&nbsp;&nbsp;`{<span class="id" title="class">Provide</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a>, <span class="id" title="class">MayProvide</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>, <span class="id" title="class">Distinguish</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">server</span> : <a class="idref" href="server.html#socket_descriptor"><span class="id" title="axiom">socket_descriptor</span></a>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">handler</span> : <span class="id" title="record">bytes</span> <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Logic.html#1c93e43e07fbeaeb6a625cb6614beb5d"><span class="id" title="notation">-&gt;</span></a> <span class="id" title="inductive">impure</span> <a class="idref" href="server.html#ix"><span class="id" title="variable">ix</span></a> <span class="id" title="record">bytes</span>)<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">preserve</span> : <span class="id" title="keyword">forall</span> (<span class="id" title="var">req</span> : <span class="id" title="record">bytes</span>), <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> (<a class="idref" href="server.html#handler"><span class="id" title="variable">handler</span></a> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a>))<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> (<span class="id" title="notation">do</span> <span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">client</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#accept_connection"><span class="id" title="definition">accept_connection</span></a> <a class="idref" href="server.html#server"><span class="id" title="variable">server</span></a> <span class="id" title="notation">in</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">req</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#read_socket"><span class="id" title="definition">read_socket</span></a> <a class="idref" href="server.html#client"><span class="id" title="variable">client</span></a> <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">let</span><span class="id" title="notation">*</span> <span class="id" title="var">res</span> <span class="id" title="notation">:=</span> <a class="idref" href="server.html#handler"><span class="id" title="variable">handler</span></a> <a class="idref" href="server.html#req"><span class="id" title="variable">req</span></a> <span class="id" title="notation">in</span><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#write_socket"><span class="id" title="definition">write_socket</span></a> <a class="idref" href="server.html#client"><span class="id" title="variable">client</span></a> <a class="idref" href="server.html#res"><span class="id" title="variable">res</span></a><span class="id" title="notation">;</span><br/>
+<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a class="idref" href="server.html#close_socket"><span class="id" title="definition">close_socket</span></a> <a class="idref" href="server.html#client"><span class="id" title="variable">client</span></a><br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="notation">end</span>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> ω ω' <span class="id" title="var">b</span> <span class="id" title="var">run</span> <span class="id" title="var">fd</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">now</span> <span class="id" title="tactic">apply</span> <span class="id" title="var">preserve</span> <span class="id" title="tactic">in</span> <span class="id" title="var">run</span>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Hint Resolve</span> <span class="id" title="var">fd_set_preserving_tcp_server_repeat_routine</span> : <span class="id" title="var">minihttp</span>.<br/>
+
+<br/>
+</div>
+
+<div class="doc">
+<a name="lab23"></a><h3 class="section">Certifying <span class="inlinecode"><span class="id" title="var">http_server</span></span></h3>
+
+</div>
+<div class="code">
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_respectful_http_server"><span class="id" title="lemma">fd_set_respectful_http_server</span></a> `{<span class="id" title="class">StrictProvide3</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(ω : <a class="idref" href="server.html#fd_set"><span class="id" title="definition">fd_set</span></a>) (<span class="id" title="var">n</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#nat"><span class="id" title="inductive">nat</span></a>)<br/>
+&nbsp;&nbsp;: <span class="id" title="inductive">respectful_impure</span> <a class="idref" href="server.html#fd_set_contract"><span class="id" title="definition">fd_set_contract</span></a> <a class="idref" href="server.html#45bf03a575f6e81359314e906fb2bff3"><span class="id" title="variable">ω</span></a> (<a class="idref" href="server.html#http_server"><span class="id" title="definition">http_server</span></a> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">prove_impure</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#repeatM_preserving_respectful"><span class="id" title="lemma">repeatM_preserving_respectful</span></a>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="var">prove_impure</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">destruct</span> (<span class="id" title="definition">http_request</span> <span class="id" title="var">x3</span>); <span class="id" title="var">prove_impure</span>;<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_respectful_http_handler"><span class="id" title="lemma">fd_set_respectful_http_handler</span></a>.<br/>
+&nbsp;&nbsp;+ <span class="id" title="tactic">intros</span> ω' ω'' [] <span class="id" title="var">run</span> <span class="id" title="var">fd</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_tcp_server_repeat_routine"><span class="id" title="lemma">fd_set_preserving_tcp_server_repeat_routine</span></a> <span class="id" title="tactic">in</span> <span class="id" title="var">run</span>; <span class="id" title="tactic">auto</span> <span class="id" title="keyword">with</span> <span class="id" title="var">minihttp</span>.<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_http_handler"><span class="id" title="lemma">fd_set_preserving_http_handler</span></a>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+
+<br/>
+<span class="id" title="keyword">Lemma</span> <a name="fd_set_preserving_http_server"><span class="id" title="lemma">fd_set_preserving_http_server</span></a> `{<span class="id" title="class">StrictProvide3</span> <span class="id" title="var">ix</span> <a class="idref" href="server.html#FILESYSTEM"><span class="id" title="inductive">FILESYSTEM</span></a> <a class="idref" href="server.html#TCP"><span class="id" title="inductive">TCP</span></a> <span class="id" title="inductive">CONSOLE</span>}<br/>
+&nbsp;&nbsp;&nbsp;&nbsp;(<span class="id" title="var">n</span> : <a class="idref" href="http://coq.inria.fr/distrib/V8.10.2/stdlib//Coq.Init.Datatypes.html#nat"><span class="id" title="inductive">nat</span></a>)<br/>
+&nbsp;&nbsp;: <a class="idref" href="server.html#fd_set_preserving"><span class="id" title="definition">fd_set_preserving</span></a> (<a class="idref" href="server.html#http_server"><span class="id" title="definition">http_server</span></a> <a class="idref" href="server.html#n"><span class="id" title="variable">n</span></a>).<br/>
+
+<br/>
+<span class="id" title="keyword">Proof</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">intros</span> ω ω' <span class="id" title="var">x</span> <span class="id" title="var">run</span> <span class="id" title="var">fd</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="var">unroll_respectful_run</span> <span class="id" title="var">run</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_repeatM"><span class="id" title="lemma">fd_set_preserving_repeatM</span></a> <span class="id" title="tactic">in</span> <span class="id" title="var">run</span>; <span class="id" title="tactic">auto</span> <span class="id" title="keyword">with</span> <span class="id" title="var">minihttp</span>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_tcp_server_repeat_routine"><span class="id" title="lemma">fd_set_preserving_tcp_server_repeat_routine</span></a>.<br/>
+&nbsp;&nbsp;<span class="id" title="tactic">apply</span> <a class="idref" href="server.html#fd_set_preserving_http_handler"><span class="id" title="lemma">fd_set_preserving_http_handler</span></a>.<br/>
+<span class="id" title="keyword">Qed</span>.<br/>
+</div>
+</div>
+
+<div id="footer">
+<hr/><a href="index.html">Index</a><hr/>This page has been generated by <a href="http://coq.inria.fr/">coqdoc</a>
+</div>
+
+</div>
+
+</body>
+</html>
