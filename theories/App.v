@@ -300,13 +300,16 @@ Definition request_handler `{Provide2 ix FILESYSTEM CONSOLE}
     end
   end.
 
-Definition http_handler `{Provide2 ix FILESYSTEM CONSOLE}
+From FreeSpec.Exec Require Import Eval.
+
+Definition http_handler `{Provide3 ix FILESYSTEM CONSOLE EVAL}
     (base : list directory_id) (req : bytes)
   : impure ix bytes :=
   do echo "new request received\n";
      echo ("  request size is " ++ Int.bytes_of_int (Bytes.length req) ++ "\n");
 
-     let* res := match http_request req with
+     let* req := eval (http_request req) in
+     let* res := match req with
                  | inr req => request_handler base (fst req)
                  | _ => pure (make_response client_error_BadRequest "Bad request")
                  end in
@@ -324,7 +327,7 @@ Definition http_handler `{Provide2 ix FILESYSTEM CONSOLE}
     our [http_handler]. As a consequence, the type of [http_server] exposes the
     three interfaces we use. *)
 
-Definition http_server `{Provide3 ix FILESYSTEM TCP CONSOLE} (n : nat)
+Definition http_server `{Provide4 ix EVAL FILESYSTEM TCP CONSOLE} (n : nat)
   : impure ix unit :=
   do echo "hello, MiniHTTPServer!\n";
      tcp_server n (http_handler [Dirname "tmp"])
@@ -521,7 +524,7 @@ Definition fd_set_contract : contract FILESYSTEM fd_set :=
     The first objective is a _safety_ property that we can express
     using the [respectful_impure] predicate. The exact lemma is: *)
 
-Lemma fd_set_respectful_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+Lemma fd_set_respectful_http_server `{StrictProvide4 ix EVAL FILESYSTEM TCP CONSOLE}
     (ω : fd_set) (n : nat)
   : respectful_impure fd_set_contract ω (http_server n).
 Abort.
@@ -535,7 +538,7 @@ Abort.
     final witness state. This can be acheived using the [respectful_run]
     predicate provided by FreeSpec. *)
 
-Lemma fd_set_preserving_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+Lemma fd_set_preserving_http_server `{StrictProvide4 ix FILESYSTEM TCP EVAL CONSOLE}
       (n : nat)
   : forall (ω ω' : fd_set) (x : unit),
     respectful_run fd_set_contract (http_server n) ω ω' x
@@ -552,7 +555,7 @@ Definition fd_set_preserving {a} `{MayProvide ix FILESYSTEM} (p : impure ix a) :
 
 (** And, as a consequence, the second lemma we want to prove becomes: *)
 
-Lemma fd_set_preserving_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+Lemma fd_set_preserving_http_server `{StrictProvide4 ix FILESYSTEM TCP EVAL CONSOLE}
     (n : nat)
   : fd_set_preserving (http_server n).
 Abort.
@@ -778,13 +781,13 @@ Qed.
 
 #[local] Opaque http_request.
 
-Lemma fd_set_respectful_http_handler `{StrictProvide2 ix FILESYSTEM CONSOLE}
+Lemma fd_set_respectful_http_handler `{StrictProvide3 ix FILESYSTEM EVAL CONSOLE}
     (base : list directory_id) (req : bytes) (ω : fd_set)
   : respectful_impure fd_set_contract ω (http_handler base req).
 
 Proof.
   prove_impure.
-  destruct (http_request req).
+  destruct (x1).
   + prove_impure.
   + destruct (fst p).
     prove_impure.
@@ -803,19 +806,20 @@ subgoal 2 is:
 
     Both are straightforward to prove using the [minihttp] hint database. *)
 
-    all: eauto with minihttp.
+    ++ eauto with minihttp.
+    ++ apply fd_set_respectful_read_content.
 Qed.
 
 Hint Resolve fd_set_respectful_http_handler : minihttp.
 
-Lemma fd_set_preserving_http_handler `{StrictProvide2 ix FILESYSTEM CONSOLE}
+Lemma fd_set_preserving_http_handler `{StrictProvide3 ix FILESYSTEM CONSOLE EVAL}
     (base : list directory_id) (req : bytes)
   : fd_set_preserving (http_handler base req).
 
 Proof.
   intros ω ω' x run fd.
   unroll_respectful_run run.
-  destruct (http_request req).
+  destruct x2.
   + now unroll_respectful_run run.
   + destruct p as [[res_id] req'].
     unroll_respectful_run run.
@@ -903,7 +907,7 @@ Hint Resolve fd_set_preserving_tcp_server_repeat_routine : minihttp.
 
 (** *** Certifying [http_server] *)
 
-Lemma fd_set_respectful_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+Lemma fd_set_respectful_http_server `{StrictProvide4 ix EVAL FILESYSTEM TCP CONSOLE}
     (ω : fd_set) (n : nat)
   : respectful_impure fd_set_contract ω (http_server n).
 
@@ -917,7 +921,7 @@ Proof.
     apply fd_set_preserving_http_handler.
 Qed.
 
-Lemma fd_set_preserving_http_server `{StrictProvide3 ix FILESYSTEM TCP CONSOLE}
+Lemma fd_set_preserving_http_server `{StrictProvide4 ix EVAL FILESYSTEM TCP CONSOLE}
     (n : nat)
   : fd_set_preserving (http_server n).
 
