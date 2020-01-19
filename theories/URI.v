@@ -192,6 +192,9 @@ Next Obligation.
   apply canonicalize_canonical.
 Qed.
 
+Definition sandbox (base : list directory_id) (req : uri) : uri :=
+  make_uri (List.app base (canonicalize (dirname req))) (filename req).
+
 (** * Parsing URI *)
 
 Definition char (c : byte) : parser bytes byte := token c.

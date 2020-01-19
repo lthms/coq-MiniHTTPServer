@@ -3,15 +3,11 @@
 
 src/extUnix.ml
 src/TCP.ml
-src/eval.ml
 src/fileSystem.ml
 src/minihttpserver_plugin.mlpack
 
 theories/Init.v
-theories/TCP.v
-theories/FileSystem.v
-theories/Exec.v
 theories/URI.v
 theories/HTTP.v
-theories/Server.v
-theories/Eval.v
+theories/App.v
+theories/Exec.v
