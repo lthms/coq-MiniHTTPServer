@@ -41,14 +41,14 @@ From FreeSpec Require Import Core.
       - Interact with the console
 
     Since an impure computation can use _several_ interfaces, FreeSpec favors
-    defining indendent primitives as part of different interfaces. In our case,
-    this means we will have three different interfaces. *)
+    defining independent primitives as part of different interfaces. In our
+    case, this means we will have three different interfaces. *)
 
 (** *** The TCP Interface *)
 
-(** We first consider the interface which will allows us to interact with TCP
+(** We first consider the interface which will allow us to interact with TCP
     sockets. The related primitives will rely on socket _descriptors_, whose
-    concrete implementaiton is opaque in most languages. We will introduce it as
+    concrete implementation is opaque in most languages. We will introduce it as
     an axiom. *)
 
 Axiom socket_descriptor : Type.
@@ -104,10 +104,10 @@ request : forall `{Provide ix i} {a}, i a -> impure ix a
     The interface type of the impure computation created by [request] ([ix]) is
     universally quantified, with only the restriction that [ix] provides at
     least the primitives of [i]. The use of this bounded universal
-    quantification is to seemlessly compose impure computations using different
+    quantification is to seamlessly compose impure computations using different
     interfaces.
 
-    To reduce the verbosity of the impure computation verbosity, we use the
+    To reduce the verbosity of the impure computation, we use the
     [Generalizable All Variables] feature of Coq. *)
 
 Generalizable All Variables.
@@ -438,7 +438,7 @@ Definition fd_set_update (ω : fd_set) (a : Type) (e : FILESYSTEM a) (x : a) : f
 
 (** *** The Caller Obligations *)
 
-(** Our experiment with FreeSpec has tended to show that using inductive types
+(** Our experience with FreeSpec has tended to show that using inductive types
     for obligations is the more convenient approach in practice, but this comes
     with a tradeoff in terms of readability. *)
 
@@ -773,8 +773,8 @@ Qed.
 
 (** The [http_handler] is interesting, because to a large extent, it does not
     use primitives itself: it relies on other impure computations [read_content]
-    and [file_exists] to do so. Interesting readers can try to remove the
-    vernacular commands which make these two computations opaques and see the
+    and [file_exists] to do so. Interested readers can try to remove the
+    vernacular commands which make these two computations opaque and see the
     outputs of [prove_impure] and [unroll_respectful_run]: in a nutshell, they
     would find themselves having to prove one more time the exact same goals, in
     more crowded contexts. *)
@@ -824,7 +824,7 @@ Proof.
   + destruct p as [[res_id] req'].
     unroll_respectful_run run.
 
-(** [unroll_respectful_run] uses a simiral approach when in presence of opaque
+(** [unroll_respectful_run] uses a similar approach when in presence of opaque
     terms. *)
 
     ++ apply fd_set_preserving_file_exists in run0.
