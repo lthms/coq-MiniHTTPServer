@@ -1,0 +1,22 @@
+(library
+  (name minihttpserver_lib)
+  (public_name coq-minihttpserver.lib)
+  (flags -open Coqbase)
+  (libraries unix str coq-base.lib))
+
+(rule
+  (target Log.v)
+  (action (run coqffi -p coq-base -m FreeSpec %{cmi:log} -o %{target})))
+
+(rule
+  (target File.v)
+  (action (run coqffi -p coq-base -m FreeSpec %{cmi:file} -o %{target})))
+
+(rule
+  (target Tcp.v)
+  (action (run coqffi -p coq-base -m FreeSpec %{cmi:tcp} -o %{target})))
+
+(coq.theory
+  (package coq-minihttpserver-ffi)
+  (name MiniHTTPServer.FFI)
+  (modules File Tcp Log))

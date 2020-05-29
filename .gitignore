@@ -5,6 +5,8 @@ Makefile*
 .*.aux
 *.vo
 *.glob
+*.vio
+*.vos
 
 _build
 minihttpserver.install

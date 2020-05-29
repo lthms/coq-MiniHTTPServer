@@ -1,0 +1,5 @@
+(library
+  (name minihttpserver_plugin)
+  (public_name coq-minihttpserver.plugin)
+  (flags :standard -rectypes -w -27)
+  (libraries coq-freespec-exec.plugin coq-minihttpserver.lib))

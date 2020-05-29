@@ -1,13 +1,17 @@
--I src
--R theories MiniHTTPServer
+-I _build/default/plugin
+-R _build/default/theories MiniHTTPServer
+-R _build/default/lib MiniHTTPServer.FFI
 
-src/extUnix.ml
-src/TCP.ml
-src/fileSystem.ml
-src/minihttpserver_plugin.mlpack
+_build/default/src/extUnix.ml
+_build/default/src/TCP.ml
+_build/default/src/fileSystem.ml
+_build/default/src/minihttpserver_plugin.mlpack
 
-theories/Init.v
-theories/URI.v
-theories/HTTP.v
-theories/App.v
-theories/Exec.v
+_build/default/theories/Init.v
+_build/default/theories/URI.v
+_build/default/theories/HTTP.v
+_build/default/theories/App.v
+_build/default/theories/Exec.v
+
+_build/default/lib/Tcp.v
+_build/default/lib/File.v

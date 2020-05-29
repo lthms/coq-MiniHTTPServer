@@ -1,16 +1,13 @@
-From Coq Require Import List.
+From MiniHTTPServer Require Export Init.
 From Comparse Require Import Monad Combinators Bytes.
-From Prelude Require Import All Option Bytes Byte.
-
-Import ListNotations.
 
 Inductive directory_id : Type :=
-| Dirname (s : bytes)
+| Dirname (s : bytestring)
 | Current
 | Parent.
 
 Inductive uri := make_uri { dirname : list directory_id
-                          ; filename : bytes
+                          ; filename : bytestring
                           }.
 
 #[local]
@@ -31,7 +28,7 @@ Definition dirname_eq (d1 d2: list directory_id) : Prop :=
 Inductive canonical : list directory_id -> Prop :=
 | canonical_nil : canonical []
 | canonical_cons
-    (s : bytes) (rst : list directory_id) (canonical_rst : canonical rst)
+    (s : bytestring) (rst : list directory_id) (canonical_rst : canonical rst)
   : canonical (Dirname s :: rst).
 
 Lemma canonical_canonical_tl (d : list directory_id)
@@ -134,7 +131,7 @@ Proof.
     now erewrite (IHd canonical_rst [Dirname s]).
 Qed.
 
-Remark canonical_canonicalize_cons_equ (s : bytes)
+Remark canonical_canonicalize_cons_equ (s : bytestring)
     (d : list directory_id) (canon : canonical d)
   : canonicalize (Dirname s :: d) = Dirname s :: canonicalize d.
 
@@ -164,7 +161,8 @@ Proof.
 Qed.
 
 #[program, local]
-Fixpoint uri_to_path_aux (d : list directory_id) (canon : canonical d) : bytes :=
+Fixpoint uri_to_path_aux (d : list directory_id) (canon : canonical d)
+  : bytestring :=
   match d with
   | [] => ""
   | Dirname x :: rst => x ++ "/" ++ uri_to_path_aux rst _
@@ -185,7 +183,7 @@ Next Obligation.
 Defined.
 
 #[program]
-Definition uri_to_path (u : uri) : bytes :=
+Definition uri_to_path (u : uri) : bytestring :=
   "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ filename u.
 
 Next Obligation.
@@ -197,34 +195,33 @@ Definition sandbox (base : list directory_id) (req : uri) : uri :=
 
 (** * Parsing URI *)
 
-Definition char (c : byte) : parser bytes byte := token c.
-Definition str (t : bytes) : parser bytes unit := tag (t := byte) t.
+Definition char (c : byte) : parser bytestring byte := token c.
+Definition str (t : bytestring) : parser bytestring unit := tag t.
 
-Definition dir_id_sep : parser bytes unit :=
+Definition dir_id_sep : parser bytestring unit :=
   eoi <|> skip (char "/") <|> skip (char " ").
 
-Definition uri_char : parser bytes byte :=
-  ensure read_token (fun x => negb ((x ?= c#" ") || (x ?= c#"/"))).
+Definition uri_char : parser bytestring byte :=
+  ensure read_token (fun x => negb ((x == " "%byte) || (x == "/"%byte))).
 
-Definition dirid : parser bytes directory_id :=
-  do many (char "/");
-     do let* name := some_until uri_char (peek dir_id_sep) in
-        peek (char "/");
-        pure (Dirname $ wrap_bytes name)
-     end
+Definition dirid : parser bytestring directory_id :=
+  many (char "/");;
+  (begin
+     let* name := some_until uri_char (peek dir_id_sep) in
+     peek (char "/");;
+     pure (Dirname (bytestring_of_list name))
+   end
      <|> (str ".." *> peek dir_id_sep *> pure Parent)
-     <|> (char "." *> peek dir_id_sep *> pure Current)
+     <|> (char "." *> peek dir_id_sep *> pure Current)).
+
+Definition path_dirname : parser bytestring (list directory_id) := many dirid.
+
+Definition path_filename : parser bytestring bytestring :=
+  let* candidat := many uri_char in
+  match candidat with
+  | [] => pure "index.html"%bytestring
+  | x => pure (bytestring_of_list x)
   end.
 
-Definition path_dirname : parser bytes (list directory_id) := many dirid.
-
-Definition path_filename : parser bytes bytes :=
-  do let* candidat := many uri_char in
-     match candidat with
-     | [] => pure b#"index.html"
-     | x => pure (wrap_bytes x)
-     end
-  end.
-
-Definition read_uri : parser bytes uri :=
+Definition read_uri : parser bytestring uri :=
   make_uri <$> path_dirname <*> (many (char "/") *> path_filename).

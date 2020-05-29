@@ -18,13 +18,16 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *)
 
-open Freespec_exec.Coqstr
+open Freespec_exec.Coqbytestring
 open Freespec_exec.Coqbool
 open Freespec_exec.Extends
 open Freespec_exec.Coqunit
-open ExtUnix
+open Minihttpserver_lib
 
 let path = "minihttpserver.filesystem"
+
+let of_coqstring s = bytestring_of_coqbytestring s
+let to_coqstring s = bytestring_to_coqbytestring s
 
 let constr_of_fd fd =
   Constr.(of_kind (Int (Uint63.of_int (Obj.magic fd))))
@@ -36,28 +39,25 @@ let fd_of_constr c =
 
 let open_file = function
   | [path] ->
-     Unix.openfile (string_of_coqbytes path) [ O_RDONLY ] 0 |> constr_of_fd
+    of_coqstring path |> File.open_file |> constr_of_fd
   | _ ->
      assert false
 
 let file_exists = function
   | [path] ->
-     Sys.file_exists (string_of_coqbytes path)
-     |> bool_to_coqbool
+     of_coqstring path |> File.file_exists |> bool_to_coqbool
   | _ ->
      assert false
 
 let read_file = function
   | [fd] ->
-     read_all_from ~line:false (fd_of_constr fd) |>
-     string_to_coqbytes
+    fd_of_constr fd |> File.read |> to_coqstring
   | _ ->
      assert false
 
 let close_file = function
   | [fd] ->
-     Unix.close (fd_of_constr fd);
-     coqtt
+    fd_of_constr fd |> File.close |> (fun _ -> coqtt);
   | _ ->
      assert false
 

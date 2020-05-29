@@ -24,9 +24,16 @@ let read_all_from ?(line = true) fd =
   let char = Bytes.create 1 in
   let buffer = Buffer.create initial_buffer_len in
   let rec aux () =
-    let n = Unix.(handle_unix_error (fun () -> read fd char 0 1)) () in
+    let n = Unix.handle_unix_error (fun () -> Unix.read fd char 0 1) () in
     if n > 0 then Buffer.add_subbytes buffer char 0 n;
     let eol = line && Bytes.get char 0 = '\n' in
     if n > 0 && not eol then aux () else Buffer.contents buffer
   in
   aux ()
+
+let write_all_to fd data =
+  let rec aux ofs len =
+    let n = Unix.write fd data ofs len in
+    if n < len then aux (ofs + n) (len - n)
+  in
+  aux 0 (Bytes.length data)

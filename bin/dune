@@ -1,0 +1,9 @@
+(coq.extraction
+  (prelude Extract)
+  (theories MiniHTTPServer)
+  (extracted_modules minihttpserver))
+
+(executable
+  (flags -open Coqbase)
+  (name minihttpserver)
+  (libraries unix coq-base.lib coq-minihttpserver.lib))
