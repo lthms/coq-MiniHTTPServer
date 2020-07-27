@@ -4,6 +4,8 @@
   (extracted_modules minihttpserver))
 
 (executable
-  (flags -open Coqbase)
   (name minihttpserver)
+  (flags -open Coqbase)
+  (public_name minihttpserver)
+  (package coq-minihttpserver)
   (libraries unix coq-base.lib coq-minihttpserver.lib))
