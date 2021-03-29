@@ -18,82 +18,37 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  *)
 
-open Freespec_exec.Coqstr
-open Freespec_exec.Extends
-open Freespec_exec.Coqunit
-open ExtUnix
-
-let path = "minihttpserver.tcp"
+type socket = Unix.file_descr
 
 let parse_address addr =
   match Str.(split (regexp ":") addr) with
   | [hostname; port] -> (Unix.inet_addr_of_string hostname, int_of_string port)
   | _ -> failwith "Invalid address"
 
-let constr_of_socket socket =
-  Constr.(of_kind (Int (Uint63.of_int (Obj.magic socket))))
+let new_tcp_socket addr =
+  let hostname, port = parse_address addr in
+  let fd = Unix.(socket PF_INET SOCK_STREAM 0) in
+  Unix.setsockopt fd SO_REUSEADDR true;
+  Unix.(bind fd (ADDR_INET (hostname, port)));
+  fd
 
-let socket_of_constr c =
-  match Constr.kind c with
-  | Constr.Int i -> (Obj.magic (snd (Uint63.to_int2 i)) : Unix.file_descr)
-  | _ -> assert false
+let listen_incoming_connection socket =
+  Unix.listen socket 1
 
-let new_tcp_socket = function
-  | [addr] ->
-     let addr = string_of_coqbytes addr in
-     let hostname, port = parse_address addr in
-     let fd = Unix.(socket PF_INET SOCK_STREAM 0) in
-     Unix.setsockopt fd SO_REUSEADDR true;
-     Unix.(bind fd (ADDR_INET (hostname, port)));
-     constr_of_socket fd
-  | _ -> assert false
+let accept_connection socket =
+  let new_socket, _ = Unix.accept socket in
+  new_socket
 
-let listen_incoming_connection = function
-  | [socket] ->
-     Unix.listen (socket_of_constr socket) 1;
-     coqtt
-  | _ -> assert false
-
-let accept_connection = function
-  | [socket] ->
-     let new_socket, _ = Unix.accept (socket_of_constr socket) in
-     constr_of_socket new_socket
-  | _ -> assert false
-
-let read_socket = function
-  | [socket] ->
-     read_all_from (socket_of_constr socket) |>
-     string_to_coqbytes
-  | _ ->
-     assert false
+let read_socket socket = ExtUnix.read_all_from socket
 
 let write_all_from data fd =
   let rec aux ofs len =
-    let n = Unix.write fd data ofs len in
+    let n = Unix.write_substring fd data ofs len in
     if n < len then aux (ofs + n) (len - n)
   in
-  aux 0 (Bytes.length data)
+  aux 0 (String.length data)
 
-let write_socket = function
-  | [socket; str] ->
-     write_all_from (bytes_of_coqbytes str) (socket_of_constr socket);
-     coqtt
-  | _ ->
-     assert false
+let write_socket socket str =
+  write_all_from str socket
 
-let close_tcp_socket = function
-  | [socket] ->
-     Unix.close (socket_of_constr socket);
-     coqtt
-  | _ ->
-     assert false
-
-let install_interface =
-  register_interface path [
-      ("NewTCPSocket",             new_tcp_socket);
-      ("ListenIncomingConnection", listen_incoming_connection);
-      ("AcceptConnection",         accept_connection);
-      ("ReadSocket",               read_socket);
-      ("WriteSocket",              write_socket);
-      ("CloseTCPSocket",           close_tcp_socket)
-    ]
+let close_tcp_socket = Unix.close

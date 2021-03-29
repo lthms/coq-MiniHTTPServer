@@ -1,0 +1,27 @@
+opam-version: "2.0"
+maintainer: "Thomas Letan <lthms@soap.coffee>"
+version: "dev"
+
+homepage: "https://github.com/lthms/coq-MiniHTTPServer"
+dev-repo: "git+https://github.com/lthms/coq-MiniHTTPServer.git"
+bug-reports: "https://github.com/lthms/coq-MiniHTTPServer.git/issues"
+
+synopsis: "A minimal HTTP server implemented in Coq"
+
+depends: [
+  "ocaml"
+  "dune" {>= "2.5"}
+  "coq" {>= "8.12" & < "8.14~" | = "dev"}
+  "coq-freespec-core" {= "0.3" }
+  "coq-freespec-exec" {= "0.3" }
+  "coq-simple-io" {>= "1.5" | = "dev"}
+]
+
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+
+authors: [
+  "Thomas Letan"
+  "Yann Régis-Gianas"
+]

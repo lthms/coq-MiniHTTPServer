@@ -1,16 +1,21 @@
 From Coq Require Import List.
-From Comparse Require Import Monad Combinators Bytes.
-From Prelude Require Import All Option Bytes Byte.
+From Comparse Require Import Monad Combinators.
+From MiniHTTPServerFFI Require Import Slice SliceFacts.
+From CoqFFI Require Import String.
+From ExtLib Require Import Char Monad.
 
+Open Scope string_scope.
+Import MonadLetNotation.
+Import ApplicativeNotation.
 Import ListNotations.
 
 Inductive directory_id : Type :=
-| Dirname (s : bytes)
+| Dirname (s : Slice.t)
 | Current
 | Parent.
 
 Inductive uri := make_uri { dirname : list directory_id
-                          ; filename : bytes
+                          ; filename : Slice.t
                           }.
 
 #[local]
@@ -31,7 +36,7 @@ Definition dirname_eq (d1 d2: list directory_id) : Prop :=
 Inductive canonical : list directory_id -> Prop :=
 | canonical_nil : canonical []
 | canonical_cons
-    (s : bytes) (rst : list directory_id) (canonical_rst : canonical rst)
+    (s : Slice.t) (rst : list directory_id) (canonical_rst : canonical rst)
   : canonical (Dirname s :: rst).
 
 Lemma canonical_canonical_tl (d : list directory_id)
@@ -134,7 +139,7 @@ Proof.
     now erewrite (IHd canonical_rst [Dirname s]).
 Qed.
 
-Remark canonical_canonicalize_cons_equ (s : bytes)
+Remark canonical_canonicalize_cons_equ (s : Slice.t)
     (d : list directory_id) (canon : canonical d)
   : canonicalize (Dirname s :: d) = Dirname s :: canonicalize d.
 
@@ -164,10 +169,10 @@ Proof.
 Qed.
 
 #[program, local]
-Fixpoint uri_to_path_aux (d : list directory_id) (canon : canonical d) : bytes :=
+Fixpoint uri_to_path_aux (d : list directory_id) (canon : canonical d) : string :=
   match d with
   | [] => ""
-  | Dirname x :: rst => x ++ "/" ++ uri_to_path_aux rst _
+  | Dirname x :: rst => (Slice.to_string x) ++ "/" ++ uri_to_path_aux rst _
   | Parent :: _ => _
   | Current :: _ => _
   end.
@@ -185,8 +190,8 @@ Next Obligation.
 Defined.
 
 #[program]
-Definition uri_to_path (u : uri) : bytes :=
-  "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ filename u.
+Definition uri_to_path (u : uri) : string :=
+  "/" ++ uri_to_path_aux (canonicalize (dirname u)) _ ++ Slice.to_string (filename u).
 
 Next Obligation.
   apply canonicalize_canonical.
@@ -197,34 +202,44 @@ Definition sandbox (base : list directory_id) (req : uri) : uri :=
 
 (** * Parsing URI *)
 
-Definition char (c : byte) : parser bytes byte := token c.
-Definition str (t : bytes) : parser bytes unit := tag (t := byte) t.
+Definition char (c : ascii) : parser Slice.t ascii := token c.
+Definition str (t : string) : parser Slice.t unit := tag (t := ascii) (Slice.of_string t).
 
-Definition dir_id_sep : parser bytes unit :=
+#[global] Axiom str_Parser : forall x rst, Parser slice_length (str (String x rst)).
+#[global] Axiom str_StrictParser : forall x rst, StrictParser slice_length (str (String x rst)).
+
+Existing Instance str_Parser.
+Existing Instance str_StrictParser.
+
+Definition dir_id_sep : parser Slice.t unit :=
   eoi <|> skip (char "/") <|> skip (char " ").
 
-Definition uri_char : parser bytes byte :=
-  ensure read_token (fun x => negb ((x ?= c#" ") || (x ?= c#"/"))).
+Definition uri_char : parser Slice.t ascii :=
+  ensure read_token (fun x => negb ((eqb x " ") || (eqb x "/"))).
 
-Definition dirid : parser bytes directory_id :=
-  do many (char "/");
-     do let* name := some_until uri_char (peek dir_id_sep) in
-        peek (char "/");
-        pure (Dirname $ wrap_bytes name)
-     end
-     <|> (str ".." *> peek dir_id_sep *> pure Parent)
-     <|> (char "." *> peek dir_id_sep *> pure Current)
+Definition dirid : parser Slice.t directory_id :=
+  many (char "/");;
+  (let* name := some_until uri_char (peek dir_id_sep) in
+   peek (char "/");;
+   pure (Dirname (Slice.pack name)))
+  <|> (str "..";;
+       peek dir_id_sep;;
+       pure Parent)
+  <|> (char ".";;
+       peek dir_id_sep;;
+       pure Current).
+
+Definition path_dirname : parser Slice.t (list directory_id) := many dirid.
+
+Definition path_filename : parser Slice.t Slice.t :=
+  let* candidat := many uri_char in
+  match candidat with
+  | [] => pure (Slice.of_string "index.html")
+  | x => pure (Slice.pack x)
   end.
 
-Definition path_dirname : parser bytes (list directory_id) := many dirid.
-
-Definition path_filename : parser bytes bytes :=
-  do let* candidat := many uri_char in
-     match candidat with
-     | [] => pure b#"index.html"
-     | x => pure (wrap_bytes x)
-     end
-  end.
-
-Definition read_uri : parser bytes uri :=
-  make_uri <$> path_dirname <*> (many (char "/") *> path_filename).
+Definition read_uri : parser Slice.t uri :=
+  let* dir := path_dirname in
+  many (char "/");;
+  let* file := path_filename in
+  pure (make_uri dir file).

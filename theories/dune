@@ -1,6 +1,6 @@
 (coq.theory
   (name MiniHTTPServer)
-  (public_name minihttpserver.theory)
-  (libraries minihttpserver.plugin))
+  (theories MiniHTTPServerFFI)
+  (package coq-mini-http-server))
 
 (include_subdirs qualified)

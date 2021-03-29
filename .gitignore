@@ -9,3 +9,5 @@ Makefile*
 _build
 minihttpserver.install
 .merlin
+
+_opam

@@ -1,5 +1,27 @@
 (library
   (name minihttpserver_plugin)
-  (public_name minihttpserver.plugin)
-  (flags :standard -rectypes -w -27)
-  (libraries freespec-exec.plugin))
+  (public_name coq-mini-http-server.plugin))
+
+(coq.theory
+  (name MiniHTTPServerFFI)
+  (package coq-mini-http-server))
+
+(rule
+  (target FileSystem.v)
+  (action (run coqffi -finterface -ftransparent-types %{cmi:fileSystem} -o %{target})))
+
+(rule
+  (target TCP.v)
+  (action (run coqffi -finterface -ftransparent-types %{cmi:TCP} -o %{target})))
+
+(rule
+  (target Console.v)
+  (action (run coqffi -finterface -ftransparent-types %{cmi:console} -o %{target})))
+
+(rule
+  (target Slice.v)
+  (action (run coqffi -fpure-module -ftransparent-types %{cmi:slice} -o %{target})))
+
+(rule
+  (target StrExt.v)
+  (action (run coqffi -fpure-module -ftransparent-types %{cmi:strext} -o %{target})))
