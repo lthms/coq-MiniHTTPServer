@@ -105,9 +105,9 @@ Fixpoint repeatM {m : Type -> Type} `{Monad m} {a} (n : nat) (p : m a) : m unit 
 
 From FreeSpec.FFI Require Import FFI.
 
-Definition tcp_server `{Provide ix TCP}
-    (n : nat) (handler : string -> impure ix string)
-  : impure ix unit :=
+Definition tcp_server `{Monad m, MonadTCP m}
+    (n : nat) (handler : string -> m string)
+  : m unit :=
   let* server := new_tcp_socket "127.0.0.1:8088" in
   listen_incoming_connection server;;
 
@@ -134,9 +134,9 @@ Definition tcp_server `{Provide ix TCP}
     FreeSpec provides [Provide2], [Provide3], [Provide4], and [Provide5] to make
     the type more readable. *)
 
-Definition read_content `{Provide2 ix FILESYSTEM CONSOLE}
+Definition read_content `{Monad m, MonadFileSystem m, MonadConsole m}
     (path : string)
-  : impure ix string :=
+  : m string :=
   echo ("  reading <" ++ path ++ ">... ");;
   let* fd := open_file path in
   let* c := read_file fd in
@@ -163,9 +163,9 @@ From MiniHTTPServer Require Import URI HTTP.
         case, 200, 401, and 404)
       - [response_to_string] to serialize a response as a valid HTTP string. *)
 
-Definition request_handler `{Provide2 ix FILESYSTEM CONSOLE}
+Definition request_handler `{Monad m, MonadFileSystem m, MonadConsole m}
     (base : list directory_id) (req : request)
-  : impure ix response :=
+  : m response :=
   match req with
   | Get uri =>
     let path := uri_to_path (sandbox base uri) in
@@ -179,9 +179,9 @@ Definition request_handler `{Provide2 ix FILESYSTEM CONSOLE}
 
 From ExtLib Require Import StateMonad.
 
-Definition http_handler `{Provide2 ix FILESYSTEM CONSOLE}
+Definition http_handler `{Monad m, MonadFileSystem m, MonadConsole m}
     (base : list directory_id) (req : string)
-  : impure ix string :=
+  : m string :=
   echo "new request received\n";;
   echo ("  request size is " ++ StrExt.of_int (StrExt.length req) ++ "\n");;
 
@@ -202,8 +202,8 @@ Definition http_handler `{Provide2 ix FILESYSTEM CONSOLE}
     our [http_handler]. As a consequence, the type of [http_server] exposes the
     three interfaces we use. *)
 
-Definition http_server `{Provide3 ix FILESYSTEM TCP CONSOLE} (n : nat)
-  : impure ix unit :=
+Definition http_server `{Monad m, MonadFileSystem m, MonadTCP m, MonadConsole m} (n : nat)
+  : m unit :=
   echo "hello, MiniHTTPServer!\n";;
   tcp_server n (http_handler [Dirname (Slice.of_string "tmp")]).
 
