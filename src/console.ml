@@ -1,3 +1,3 @@
-let echo = print_string
+let echo msg = Format.printf "%s@?" msg
 
 let scan = read_line

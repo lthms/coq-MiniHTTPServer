@@ -1,6 +1,7 @@
 (library
-  (name minihttpserver_plugin)
-  (public_name coq-mini-http-server.plugin))
+  (name minihttpserver_lib)
+  (public_name coq-mini-http-server.plugin)
+  (libraries unix str))
 
 (coq.theory
   (name MiniHTTPServerFFI)

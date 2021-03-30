@@ -1,0 +1,8 @@
+(coq.extraction
+  (prelude main)
+  (theories MiniHTTPServer)
+  (extracted_modules main))
+
+(executable
+  (name main)
+  (libraries minihttpserver_lib))
